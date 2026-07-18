@@ -18,7 +18,7 @@ def test_single_path_channel():
         )
     ]
 
-    received = apply_channel(
+    channel = apply_channel(
         waveform,
         paths,
         sample_rate=1000.0,
@@ -26,7 +26,7 @@ def test_single_path_channel():
     )
 
     np.testing.assert_allclose(
-        received,
+        channel.waveform,
         waveform,
         atol=1e-10,
     )
@@ -51,7 +51,7 @@ def test_two_path_channel():
         ),
     ]
 
-    received = apply_channel(
+    channel = apply_channel(
         waveform,
         paths,
         sample_rate=1000.0,
@@ -69,7 +69,7 @@ def test_two_path_channel():
     )
 
     np.testing.assert_allclose(
-        received,
+        channel.waveform,
         expected,
         atol=1e-10,
     )

@@ -2,6 +2,8 @@ import numpy as np
 
 from powder_otfs.channel.channel import apply_channel
 from powder_otfs.channel.path import ChannelPath
+from powder_otfs.equalization.zf import zero_forcing_equalizer
+from powder_otfs.estimation.perfect import perfect_channel_estimate
 from powder_otfs.metrics.ber import bit_error_rate
 from powder_otfs.modulation.qam import qam_demodulate, qam_modulate
 from powder_otfs.otfs.transforms import (
@@ -22,10 +24,10 @@ def main():
     qam_order = 4
 
     sample_rate = 1e6
-    snr_db = 10.0
+    snr_db = 30.0
 
-    num_bits = int(
-        np.log2(qam_order)
+    num_bits = (
+        int(np.log2(qam_order))
         * num_subcarriers
         * num_time_slots
     )
@@ -38,9 +40,6 @@ def main():
         ),
     ]
 
-    # ------------------------------------------------------------------
-    # Print Simulation Configuration
-    # ------------------------------------------------------------------
     print("\n================ OTFS Simulation ================")
     print(f"Modulation        : {qam_order}-QAM")
     print(f"Grid Size         : {num_subcarriers} x {num_time_slots}")
@@ -104,23 +103,40 @@ def main():
 
     rx_dd_grid = sfft(rx_tf_grid)
 
-    rx_symbols = rx_dd_grid.reshape(-1)
+    #
+    # Perfect CSI
+    #
+    channel_response = np.ones_like(rx_dd_grid)
+
+    estimate = perfect_channel_estimate(
+        channel_response=channel_response,
+        noise_variance=0.0,
+    )
+
+    #
+    # Zero-Forcing Equalization
+    #
+    equalized = zero_forcing_equalizer(
+        rx_dd_grid,
+        estimate,
+    )
+
+    rx_symbols = equalized.symbols.reshape(-1)
 
     rx_bits = qam_demodulate(
         rx_symbols,
         order=qam_order,
     )
 
-    # ------------------------------------------------------------------
-    # Metrics
-    # ------------------------------------------------------------------
     ber = bit_error_rate(
         bits,
         rx_bits,
     )
 
     print("Simulation Complete")
-    print(f"Bit Error Rate (BER): {ber:.6f}")
+    print(f"Channel Estimator : {estimate.method}")
+    print(f"Equalizer         : {equalized.method}")
+    print(f"Bit Error Rate    : {ber:.6f}")
 
 
 if __name__ == "__main__":
