@@ -3,34 +3,38 @@ import numpy as np
 from powder_otfs.channel.awgn import add_awgn
 from powder_otfs.channel.delay import apply_delay
 from powder_otfs.channel.doppler import apply_doppler
+from powder_otfs.channel.path import ChannelPath
+
 
 def apply_channel(
     waveform: np.ndarray,
-    delay_samples: int,
-    doppler_hz: float,
+    paths: list[ChannelPath],
     sample_rate: float,
     snr_db: float,
 ) -> np.ndarray:
-    """
-    Apply a wireless channel consisting of:
-        1. Propagation delay
-        2. Doppler shift
-        3. AWGN
-    """
+    """Apply a multipath wireless channel."""
 
-    waveform = apply_delay(
-        waveform, delay_samples,
-    )
+    received = np.zeros_like(waveform)
 
-    waveform = apply_doppler(
-        waveform,
-        doppler_hz,
-        sample_rate,
-    )
+    for path in paths:
+        path_waveform = apply_delay(
+            waveform,
+            path.delay_samples,
+        )
 
-    waveform = add_awgn(
-        waveform,
+        path_waveform = apply_doppler(
+            path_waveform,
+            path.doppler_hz,
+            sample_rate,
+        )
+
+        path_waveform *= path.gain
+
+        received += path_waveform
+
+    received = add_awgn(
+        received,
         snr_db,
     )
 
-    return waveform
+    return received
