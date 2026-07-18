@@ -26,7 +26,7 @@ def main() -> None:
     paths = [
         ChannelPath(
             delay_samples=0,
-            doppler_hz=0.0,
+            doppler_hz=1000.0,
             gain=1.0 + 0.0j,
         ),
     ]
