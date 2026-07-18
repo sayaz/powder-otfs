@@ -6,7 +6,7 @@ def qam_modulate(bits: np.ndarray, order: int) -> np.ndarray:
     if len(bits) % 2 != 0:
         raise ValueError("QPSK requires an even number of bits")
     
-    bit_pairs = bits.reshape(-1,2)
+    bit_pairs = bits.astype(np.int8).reshape(-1, 2)
     symbols = (1 - 2 * bit_pairs[:,0]) + 1j * (1 - 2 * bit_pairs[:, 1])
 
     return symbols / np.sqrt(2)
