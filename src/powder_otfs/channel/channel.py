@@ -13,47 +13,44 @@ def apply_channel(
     sample_rate: float,
     snr_db: float,
 ) -> ChannelResult:
-    """
-    Apply a multipath wireless channel and AWGN.
-    """
+    """Apply multipath propagation and AWGN."""
 
-    received = np.zeros_like(waveform, dtype=complex)
+    if not paths:
+        raise ValueError("At least one channel path is required.")
 
-    #
-    # Apply each propagation path
-    #
+    received_without_noise = np.zeros_like(
+        waveform,
+        dtype=np.complex128,
+    )
+
     for path in paths:
-
-        signal = apply_delay(
+        path_waveform = apply_delay(
             waveform,
             path.delay_samples,
         )
 
-        signal = apply_doppler(
-            signal,
+        path_waveform = apply_doppler(
+            path_waveform,
             path.doppler_hz,
             sample_rate,
         )
 
-        signal *= path.gain
+        received_without_noise += path.gain * path_waveform
 
-        received += signal
+    signal_power = float(
+        np.mean(np.abs(received_without_noise) ** 2)
+    )
+    snr_linear = 10.0 ** (snr_db / 10.0)
+    noise_variance = signal_power / snr_linear
 
-    #
-    # Add AWGN
-    #
     received = add_awgn(
-        received,
+        received_without_noise,
         snr_db,
     )
 
-    #
-    # Temporary perfect channel response.
-    # This will be replaced with the true channel response later.
-    #
-    channel_response = np.ones_like(received, dtype=complex)
-
     return ChannelResult(
         waveform=received,
-        channel_response=channel_response,
+        paths=tuple(paths),
+        sample_rate=sample_rate,
+        noise_variance=noise_variance,
     )
