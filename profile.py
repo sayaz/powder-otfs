@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """POWDER profile for a two-node OTFS conducted-RF experiment."""
 
 import geni.portal as portal
@@ -89,9 +89,9 @@ request = context.makeRequestRSpec()
 
 
 def add_radio_pair(
-    role: str,
-    radio_component_id: str,
-) -> None:
+    role,
+    radio_component_id,
+):
     """Add one compute node, one X310, and their dedicated link."""
 
     compute = request.RawPC(role)
@@ -100,7 +100,7 @@ def add_radio_pair(
     compute.disk_image = UBUNTU_IMAGE
 
     compute_interface = compute.addInterface(
-        f"{role}-usrp-interface"
+        "{}-usrp-interface".format(role)
     )
     compute_interface.addAddress(
         rspec.IPv4Address(
@@ -116,14 +116,16 @@ def add_radio_pair(
         )
     )
 
-    radio = request.RawPC(f"{role}-sdr")
+    radio = request.RawPC("{}-sdr".format(role))
     radio.component_manager_id = COMPONENT_MANAGER_ID
     radio.component_id = radio_component_id
     radio_interface = radio.addInterface(
-        f"{role}-sdr-interface"
+        "{}-sdr-interface".format(role)
     )
 
-    radio_link = request.Link(f"{role}-sdr-link")
+    radio_link = request.Link(
+        "{}-sdr-link".format(role)
+    )
     radio_link.bandwidth = 10 * 1000 * 1000
     radio_link.addInterface(compute_interface)
     radio_link.addInterface(radio_interface)
