@@ -8,7 +8,7 @@ from powder_otfs.modulation.qam import (
 from powder_otfs.ota.framing import create_preamble
 from powder_otfs.ota.synchronization import find_payload_start
 from powder_otfs.ota.x310 import (
-    configure_x310,
+    configure_x310_rx,
     receive_samples,
 )
 from powder_otfs.otfs.transforms import (
@@ -23,7 +23,7 @@ def main() -> None:
     center_frequency = 3.5e9
     rx_gain = 20.0
     channel = 0
-    antenna = "TX/RX"
+    antenna = "RX2"
     capture_samples = 6_000_000
 
     num_delay_bins = 32
@@ -65,7 +65,7 @@ def main() -> None:
     print("Waiting for samples...")
     print("========================================\n")
 
-    usrp = configure_x310(
+    usrp = configure_x310_rx(
         device_address=device_address,
         sample_rate=sample_rate,
         center_frequency=center_frequency,

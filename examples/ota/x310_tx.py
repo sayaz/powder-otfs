@@ -7,7 +7,7 @@ from powder_otfs.ota.framing import (
     normalize_waveform,
 )
 from powder_otfs.ota.x310 import (
-    configure_x310,
+    configure_x310_tx,
     transmit_waveform,
 )
 from powder_otfs.otfs.transforms import heisenberg, isfft
@@ -87,7 +87,7 @@ def main() -> None:
     print(f"Total Samples      : {len(repeated_waveform)}")
     print("===========================================\n")
 
-    usrp = configure_x310(
+    usrp = configure_x310_tx(
         device_address=device_address,
         sample_rate=sample_rate,
         center_frequency=center_frequency,

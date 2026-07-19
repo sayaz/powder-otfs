@@ -4,15 +4,15 @@ import numpy as np
 import uhd
 
 
-def configure_x310(
+def configure_x310_tx(
     device_address: str,
     sample_rate: float,
     center_frequency: float,
     gain: float,
-    channel: int,
-    antenna: str,
+    channel: int = 0,
+    antenna: str = "TX/RX",
 ) -> uhd.usrp.MultiUSRP:
-    """Configure one X310 radio channel."""
+    """Configure an X310 transmitter."""
 
     usrp = uhd.usrp.MultiUSRP(
         f"addr={device_address}"
@@ -20,22 +20,42 @@ def configure_x310(
 
     usrp.set_clock_source("external")
     usrp.set_time_source("external")
-
-    usrp.set_rx_rate(sample_rate, channel)
     usrp.set_tx_rate(sample_rate, channel)
+    usrp.set_tx_freq(
+        uhd.types.TuneRequest(center_frequency),
+        channel,
+    )
+    usrp.set_tx_gain(gain, channel)
+    usrp.set_tx_antenna(antenna, channel)
 
-    tune_request = uhd.types.TuneRequest(
-        center_frequency
+    time.sleep(1.0)
+
+    return usrp
+
+
+def configure_x310_rx(
+    device_address: str,
+    sample_rate: float,
+    center_frequency: float,
+    gain: float,
+    channel: int = 0,
+    antenna: str = "RX2",
+) -> uhd.usrp.MultiUSRP:
+    """Configure an X310 receiver."""
+
+    usrp = uhd.usrp.MultiUSRP(
+        f"addr={device_address}"
     )
 
-    usrp.set_rx_freq(tune_request, channel)
-    usrp.set_tx_freq(tune_request, channel)
-
+    usrp.set_clock_source("external")
+    usrp.set_time_source("external")
+    usrp.set_rx_rate(sample_rate, channel)
+    usrp.set_rx_freq(
+        uhd.types.TuneRequest(center_frequency),
+        channel,
+    )
     usrp.set_rx_gain(gain, channel)
-    usrp.set_tx_gain(gain, channel)
-
     usrp.set_rx_antenna(antenna, channel)
-    usrp.set_tx_antenna(antenna, channel)
 
     time.sleep(1.0)
 
@@ -142,8 +162,7 @@ def receive_samples(
             uhd.types.RXMetadataErrorCode.none
         ):
             raise RuntimeError(
-                f"X310 receive error: "
-                f"{metadata.strerror()}"
+                f"X310 receive error: {metadata.strerror()}"
             )
 
         if count == 0:
