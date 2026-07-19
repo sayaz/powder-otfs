@@ -7,10 +7,10 @@ from powder_otfs.channel.path import ChannelPath
 from powder_otfs.equalization.zf import zero_forcing_equalizer
 from powder_otfs.equalization.mmse import mmse_equalizer
 from powder_otfs.estimation.pilot import pilot_channel_estimate
-from powder_otfs.metrics.ber import bit_error_rate
 from powder_otfs.modulation.qam import qam_demodulate, qam_modulate
 from powder_otfs.otfs.grid import insert_pilot_and_guards
 from powder_otfs.otfs.transforms import heisenberg, isfft, sfft, wigner
+from powder_otfs.visualization.plots import plot_otfs_debug_view
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -37,10 +37,14 @@ def main() -> None:
     qam_order = 4
 
     sample_rate = 1e6
-    snr_db = 30.0
+    snr_db = 100.0
+    num_frames = 100
+    show_plots = True
 
     pilot_value = 4.0 + 0.0j
     threshold_factor = 5.0
+    maximum_supported_delay = 3
+    maximum_supported_doppler = 2
 
     pilot_position = (
         num_delay_bins // 2,
@@ -86,18 +90,8 @@ def main() -> None:
         in active_definitions
     ]
 
-    maximum_delay = max(
-        delay_samples
-        for delay_samples, _, _ in active_definitions
-    )
-
-    maximum_doppler = max(
-        abs(doppler_bin)
-        for _, doppler_bin, _ in active_definitions
-    )
-
-    guard_delay = maximum_delay
-    guard_doppler = 2 * maximum_doppler
+    guard_delay = maximum_supported_delay
+    guard_doppler = 2 * maximum_supported_doppler
 
     pilot_delay, pilot_doppler = pilot_position
 
@@ -135,9 +129,16 @@ def main() -> None:
     print(f"Modulation        : {qam_order}-QAM")
     print(f"DD Grid Size      : {num_delay_bins} x {num_doppler_bins}")
     print(f"Data Symbols      : {num_data_symbols}")
-    print(f"Total Bits        : {num_bits}")
+    print(f"Bits per Frame    : {num_bits}")
+    print(f"Number of Frames  : {num_frames}")
+    print(f"Total Bits        : {num_bits * num_frames}")
     print(f"Pilot Position    : {pilot_position}")
     print(f"Pilot Value       : {pilot_value}")
+    print(f"Supported Delay   : 0 to {maximum_supported_delay} samples")
+    print(
+        f"Supported Doppler : "
+        f"±{maximum_supported_doppler} bins"
+    )
     print(
         f"Guard Size        : "
         f"{2 * guard_delay + 1} x "
@@ -163,121 +164,158 @@ def main() -> None:
 
     print("=================================================\n")
 
-    bits = np.random.randint(
-        0,
-        2,
-        num_bits,
-        dtype=np.uint8,
-    )
-
-    tx_symbols = qam_modulate(
-        bits,
-        order=qam_order,
-    )
-
-    tx_dd_grid = np.zeros(
-        (num_delay_bins, num_doppler_bins),
-        dtype=np.complex128,
-    )
-
-    tx_dd_grid[data_mask] = tx_symbols
-
-    tx_dd_grid = insert_pilot_and_guards(
-        grid=tx_dd_grid,
-        pilot_delay_bin=pilot_delay,
-        pilot_doppler_bin=pilot_doppler,
-        pilot_amplitude=float(np.abs(pilot_value)),
-        guard_delay=guard_delay,
-        guard_doppler=guard_doppler,
-    )
-
-    tx_tf_grid = isfft(tx_dd_grid)
-    tx_waveform = heisenberg(tx_tf_grid)
-
-    channel = apply_channel(
-        tx_waveform,
-        paths=paths,
-        sample_rate=sample_rate,
-        snr_db=snr_db,
-    )
-
-    rx_tf_grid = wigner(
-        channel.waveform,
-        num_subcarriers=num_delay_bins,
-        num_time_slots=num_doppler_bins,
-    )
-
-    rx_dd_grid = sfft(rx_tf_grid)
-
-    estimation_threshold = (
-        threshold_factor
-        * np.sqrt(channel.noise_variance)
-    )
-
     observation_delay_start = (
-        pilot_delay - maximum_delay
+        pilot_delay - maximum_supported_delay
     )
     observation_delay_stop = pilot_delay + 1
 
     observation_doppler_start = (
-        pilot_doppler - maximum_doppler
+        pilot_doppler - maximum_supported_doppler
     )
     observation_doppler_stop = (
-        pilot_doppler + maximum_doppler + 1
+        pilot_doppler + maximum_supported_doppler + 1
     )
 
-    pilot_observation = np.zeros_like(rx_dd_grid)
+    estimate = None
+    equalized = None
+    estimation_threshold = 0.0
+    total_bit_errors = 0
+    total_bits = 0
+    debug_plot_data = None
 
-    pilot_observation[
-        observation_delay_start:observation_delay_stop,
-        observation_doppler_start:observation_doppler_stop,
-    ] = rx_dd_grid[
-        observation_delay_start:observation_delay_stop,
-        observation_doppler_start:observation_doppler_stop,
-    ]
-
-    estimate = pilot_channel_estimate(
-        received_pilot_grid=pilot_observation,
-        pilot_position=pilot_position,
-        pilot_value=pilot_value,
-        sample_rate=sample_rate,
-        noise_variance=channel.noise_variance,
-        threshold=estimation_threshold,
-    )
-
-    if equalizer_name.lower() == "zf":
-        equalized = zero_forcing_equalizer(
-            received_grid=rx_dd_grid,
-            estimate=estimate,
-        )
-    elif equalizer_name.lower() == "mmse":
-        equalized = mmse_equalizer(
-            received_grid=rx_dd_grid,
-            estimate=estimate,
-            symbol_energy=1.0,
-        )
-    else:
-        raise ValueError(
-            "equalizer_name must be 'zf' or 'mmse'."
+    for frame_index in range(num_frames):
+        bits = np.random.randint(
+            0,
+            2,
+            num_bits,
+            dtype=np.uint8,
         )
 
-    rx_symbols = equalized.symbols[data_mask]
+        tx_symbols = qam_modulate(
+            bits,
+            order=qam_order,
+        )
 
-    rx_bits = qam_demodulate(
-        rx_symbols,
-        order=qam_order,
-    )
+        tx_dd_grid = np.zeros(
+            (num_delay_bins, num_doppler_bins),
+            dtype=np.complex128,
+        )
+        tx_dd_grid[data_mask] = tx_symbols
 
-    ber = bit_error_rate(
-        bits,
-        rx_bits,
-    )
+        tx_dd_grid = insert_pilot_and_guards(
+            grid=tx_dd_grid,
+            pilot_delay_bin=pilot_delay,
+            pilot_doppler_bin=pilot_doppler,
+            pilot_amplitude=float(np.abs(pilot_value)),
+            guard_delay=guard_delay,
+            guard_doppler=guard_doppler,
+        )
+
+        tx_tf_grid = isfft(tx_dd_grid)
+        tx_waveform = heisenberg(tx_tf_grid)
+
+        channel = apply_channel(
+            tx_waveform,
+            paths=paths,
+            sample_rate=sample_rate,
+            snr_db=snr_db,
+        )
+
+        rx_tf_grid = wigner(
+            channel.waveform,
+            num_subcarriers=num_delay_bins,
+            num_time_slots=num_doppler_bins,
+        )
+        rx_dd_grid = sfft(rx_tf_grid)
+
+        if estimate is None:
+            estimation_threshold = (
+                threshold_factor
+                * np.sqrt(channel.noise_variance)
+            )
+
+            pilot_observation = np.zeros_like(rx_dd_grid)
+            pilot_observation[
+                observation_delay_start:observation_delay_stop,
+                observation_doppler_start:observation_doppler_stop,
+            ] = rx_dd_grid[
+                observation_delay_start:observation_delay_stop,
+                observation_doppler_start:observation_doppler_stop,
+            ]
+
+            estimate = pilot_channel_estimate(
+                received_pilot_grid=pilot_observation,
+                pilot_position=pilot_position,
+                pilot_value=pilot_value,
+                sample_rate=sample_rate,
+                noise_variance=channel.noise_variance,
+                threshold=estimation_threshold,
+            )
+
+        if equalizer_name.lower() == "zf":
+            equalized = zero_forcing_equalizer(
+                received_grid=rx_dd_grid,
+                estimate=estimate,
+            )
+        elif equalizer_name.lower() == "mmse":
+            equalized = mmse_equalizer(
+                received_grid=rx_dd_grid,
+                estimate=estimate,
+                symbol_energy=1.0,
+            )
+        else:
+            raise ValueError(
+                "equalizer_name must be 'zf' or 'mmse'."
+            )
+
+        if show_plots and frame_index == 0:
+            debug_plot_data = (
+                tx_dd_grid.copy(),
+                rx_dd_grid.copy(),
+                equalized.symbols.copy(),
+                pilot_observation.copy(),
+            )
+
+        rx_symbols = equalized.symbols[data_mask]
+        rx_bits = qam_demodulate(
+            rx_symbols,
+            order=qam_order,
+        )
+
+        total_bit_errors += int(
+            np.count_nonzero(bits != rx_bits)
+        )
+        total_bits += len(bits)
+
+        if (
+            frame_index == 0
+            or (frame_index + 1) % 10 == 0
+            or frame_index + 1 == num_frames
+        ):
+            print(
+                f"Completed frame "
+                f"{frame_index + 1}/{num_frames}"
+            )
+
+    ber = total_bit_errors / total_bits
 
     print("Simulation Complete")
     print(f"Channel Estimator : {estimate.method}")
     print(f"Equalizer         : {equalized.method}")
     print(f"Threshold         : {estimation_threshold:.6f}")
+    print(f"Bit Errors        : {total_bit_errors}")
+    print(f"Processed Bits    : {total_bits}")
     print(f"Bit Error Rate    : {ber:.6f}")
+
+    if show_plots and debug_plot_data is not None:
+        plot_otfs_debug_view(
+            tx_dd_grid=debug_plot_data[0],
+            rx_dd_grid=debug_plot_data[1],
+            equalized_dd_grid=debug_plot_data[2],
+            pilot_observation=debug_plot_data[3],
+            data_mask=data_mask,
+            pilot_position=pilot_position,
+        )
 
 
 if __name__ == "__main__":
