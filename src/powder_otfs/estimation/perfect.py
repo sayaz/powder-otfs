@@ -1,6 +1,6 @@
 import numpy as np
 
-from powder_otfs.channel.delay import apply_delay
+from powder_otfs.channel.delay import apply_circular_delay
 from powder_otfs.channel.doppler import apply_doppler
 from powder_otfs.channel.result import ChannelResult
 from powder_otfs.estimation.estimate import ChannelEstimate
@@ -38,7 +38,7 @@ def perfect_channel_estimate(
         )
 
         for path in channel.paths:
-            path_waveform = apply_delay(
+            path_waveform = apply_circular_delay(
                 basis_waveform,
                 path.delay_samples,
             )

@@ -21,7 +21,9 @@ def test_pilot_channel_estimate() -> None:
         received_pilot_grid=received_pilot_grid,
         pilot_position=pilot_position,
         pilot_value=pilot_value,
+        sample_rate=1000.0,
         noise_variance=0.01,
+        threshold=0.1,
     )
 
     expected = channel_gain * np.eye(

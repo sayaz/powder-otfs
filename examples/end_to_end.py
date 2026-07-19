@@ -1,8 +1,11 @@
+import argparse
+
 import numpy as np
 
 from powder_otfs.channel.channel import apply_channel
 from powder_otfs.channel.path import ChannelPath
 from powder_otfs.equalization.zf import zero_forcing_equalizer
+from powder_otfs.equalization.mmse import mmse_equalizer
 from powder_otfs.estimation.pilot import pilot_channel_estimate
 from powder_otfs.metrics.ber import bit_error_rate
 from powder_otfs.modulation.qam import qam_demodulate, qam_modulate
@@ -10,7 +13,25 @@ from powder_otfs.otfs.grid import insert_pilot_and_guards
 from powder_otfs.otfs.transforms import heisenberg, isfft, sfft, wigner
 
 
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run an OTFS simulation."
+    )
+
+    parser.add_argument(
+        "--num-paths",
+        type=int,
+        default=1,
+        help="Number of predefined channel paths to use (1-10).",
+    )
+
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_arguments()
+
+    # Simulation settings
     num_delay_bins = 32
     num_doppler_bins = 16
     qam_order = 4
@@ -18,34 +39,88 @@ def main() -> None:
     sample_rate = 1e6
     snr_db = 30.0
 
+    pilot_value = 4.0 + 0.0j
+    threshold_factor = 5.0
+
     pilot_position = (
         num_delay_bins // 2,
         num_doppler_bins // 2,
     )
-    pilot_value = 2.0 + 0.0j
-    guard_delay = 1
-    guard_doppler = 1
-    estimation_threshold = 0.1
+
+    doppler_resolution = (
+        sample_rate
+        / (num_delay_bins * num_doppler_bins)
+    )
+
+    equalizer_name = "mmse"
+
+    # delay samples, Doppler bins, complex gain
+    path_definitions = [
+        (0, 0, 1.00 + 0.00j),
+        (1, 1, 0.70 + 0.20j),
+        (2, -1, 0.50 - 0.15j),
+        (3, 2, 0.40 + 0.10j),
+        (1, -2, 0.35 - 0.20j),
+        (4, 1, 0.30 + 0.05j),
+        (2, 3, 0.25 - 0.10j),
+        (5, -3, 0.22 + 0.08j),
+        (3, -1, 0.20 - 0.05j),
+        (4, 2, 0.18 + 0.04j),
+    ]
+
+    if not 1 <= args.num_paths <= len(path_definitions):
+        raise ValueError(
+            f"num_paths must be between 1 and "
+            f"{len(path_definitions)}."
+        )
+
+    active_definitions = path_definitions[: args.num_paths]
 
     paths = [
         ChannelPath(
-            delay_samples=0,
-            doppler_hz=0.0,
-            gain=0.8 + 0.2j,
-        ),
+            delay_samples=delay_samples,
+            doppler_hz=doppler_bin * doppler_resolution,
+            gain=gain,
+        )
+        for delay_samples, doppler_bin, gain
+        in active_definitions
     ]
 
-    data_mask = np.ones(
-        (num_delay_bins, num_doppler_bins),
-        dtype=bool,
+    maximum_delay = max(
+        delay_samples
+        for delay_samples, _, _ in active_definitions
     )
+
+    maximum_doppler = max(
+        abs(doppler_bin)
+        for _, doppler_bin, _ in active_definitions
+    )
+
+    guard_delay = maximum_delay
+    guard_doppler = 2 * maximum_doppler
 
     pilot_delay, pilot_doppler = pilot_position
 
     delay_start = pilot_delay - guard_delay
     delay_stop = pilot_delay + guard_delay + 1
+
     doppler_start = pilot_doppler - guard_doppler
     doppler_stop = pilot_doppler + guard_doppler + 1
+
+    if (
+        delay_start < 0
+        or delay_stop > num_delay_bins
+        or doppler_start < 0
+        or doppler_stop > num_doppler_bins
+    ):
+        raise ValueError(
+            "The DD grid is too small for the required guard region."
+        )
+
+    data_mask = np.ones(
+        (num_delay_bins, num_doppler_bins),
+        dtype=bool,
+    )
 
     data_mask[
         delay_start:delay_stop,
@@ -63,17 +138,27 @@ def main() -> None:
     print(f"Total Bits        : {num_bits}")
     print(f"Pilot Position    : {pilot_position}")
     print(f"Pilot Value       : {pilot_value}")
-    print(f"Guard Size        : {2 * guard_delay + 1} x {2 * guard_doppler + 1}")
+    print(
+        f"Guard Size        : "
+        f"{2 * guard_delay + 1} x "
+        f"{2 * guard_doppler + 1}"
+    )
+    print(f"Doppler Resolution: {doppler_resolution:.3f} Hz")
     print(f"Sample Rate       : {sample_rate:.0f} Hz")
     print(f"SNR               : {snr_db:.1f} dB")
     print(f"Channel Paths     : {len(paths)}")
 
-    for index, path in enumerate(paths, start=1):
+    for index, (
+        delay_samples,
+        doppler_bin,
+        gain,
+    ) in enumerate(active_definitions, start=1):
         print(
             f"  Path {index}: "
-            f"Delay={path.delay_samples} samples, "
-            f"Doppler={path.doppler_hz} Hz, "
-            f"Gain={path.gain}"
+            f"Delay={delay_samples} samples, "
+            f"Doppler Bin={doppler_bin}, "
+            f"Doppler={doppler_bin * doppler_resolution:.3f} Hz, "
+            f"Gain={gain}"
         )
 
     print("=================================================\n")
@@ -94,6 +179,7 @@ def main() -> None:
         (num_delay_bins, num_doppler_bins),
         dtype=np.complex128,
     )
+
     tx_dd_grid[data_mask] = tx_symbols
 
     tx_dd_grid = insert_pilot_and_guards(
@@ -120,29 +206,60 @@ def main() -> None:
         num_subcarriers=num_delay_bins,
         num_time_slots=num_doppler_bins,
     )
+
     rx_dd_grid = sfft(rx_tf_grid)
 
+    estimation_threshold = (
+        threshold_factor
+        * np.sqrt(channel.noise_variance)
+    )
+
+    observation_delay_start = (
+        pilot_delay - maximum_delay
+    )
+    observation_delay_stop = pilot_delay + 1
+
+    observation_doppler_start = (
+        pilot_doppler - maximum_doppler
+    )
+    observation_doppler_stop = (
+        pilot_doppler + maximum_doppler + 1
+    )
+
     pilot_observation = np.zeros_like(rx_dd_grid)
+
     pilot_observation[
-        delay_start:delay_stop,
-        doppler_start:doppler_stop,
+        observation_delay_start:observation_delay_stop,
+        observation_doppler_start:observation_doppler_stop,
     ] = rx_dd_grid[
-        delay_start:delay_stop,
-        doppler_start:doppler_stop,
+        observation_delay_start:observation_delay_stop,
+        observation_doppler_start:observation_doppler_stop,
     ]
 
     estimate = pilot_channel_estimate(
         received_pilot_grid=pilot_observation,
         pilot_position=pilot_position,
         pilot_value=pilot_value,
+        sample_rate=sample_rate,
         noise_variance=channel.noise_variance,
         threshold=estimation_threshold,
     )
 
-    equalized = zero_forcing_equalizer(
-        received_grid=rx_dd_grid,
-        estimate=estimate,
-    )
+    if equalizer_name.lower() == "zf":
+        equalized = zero_forcing_equalizer(
+            received_grid=rx_dd_grid,
+            estimate=estimate,
+        )
+    elif equalizer_name.lower() == "mmse":
+        equalized = mmse_equalizer(
+            received_grid=rx_dd_grid,
+            estimate=estimate,
+            symbol_energy=1.0,
+        )
+    else:
+        raise ValueError(
+            "equalizer_name must be 'zf' or 'mmse'."
+        )
 
     rx_symbols = equalized.symbols[data_mask]
 
@@ -159,6 +276,7 @@ def main() -> None:
     print("Simulation Complete")
     print(f"Channel Estimator : {estimate.method}")
     print(f"Equalizer         : {equalized.method}")
+    print(f"Threshold         : {estimation_threshold:.6f}")
     print(f"Bit Error Rate    : {ber:.6f}")
 
 

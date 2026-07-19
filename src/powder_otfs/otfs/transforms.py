@@ -1,7 +1,8 @@
 import numpy as np
 
+
 def isfft(grid: np.ndarray) -> np.ndarray:
-    """Inverse Symplectic Finite Fourier Transform (ISFFT)."""
+    """Convert a delay-Doppler grid to a time-frequency grid."""
 
     temp = np.fft.ifft(
         grid,
@@ -15,8 +16,9 @@ def isfft(grid: np.ndarray) -> np.ndarray:
         norm="ortho",
     )
 
+
 def heisenberg(tf_grid: np.ndarray) -> np.ndarray:
-    """Convert the time-frequency grid to a time-domain waveform."""
+    """Convert a time-frequency grid to a time-domain waveform."""
 
     time_grid = np.fft.ifft(
         tf_grid,
@@ -24,37 +26,43 @@ def heisenberg(tf_grid: np.ndarray) -> np.ndarray:
         norm="ortho",
     )
 
-    return time_grid.reshape(-1)
+    return time_grid.reshape(
+        -1,
+        order="F",
+    )
+
 
 def wigner(
-        waveform: np.ndarray,
-        num_subcarriers: int,
-        num_time_slots: int,
+    waveform: np.ndarray,
+    num_subcarriers: int,
+    num_time_slots: int,
 ) -> np.ndarray:
-    """Apply the Wigner transforms to recover the TF grid"""
+    """Recover the time-frequency grid from a waveform."""
 
-    tf_grid = waveform.reshape(
+    time_grid = waveform.reshape(
         num_subcarriers,
         num_time_slots,
+        order="F",
     )
 
     return np.fft.fft(
+        time_grid,
+        axis=0,
+        norm="ortho",
+    )
+
+
+def sfft(tf_grid: np.ndarray) -> np.ndarray:
+    """Convert a time-frequency grid to a delay-Doppler grid."""
+
+    temp = np.fft.ifft(
         tf_grid,
-        axis = 0,
-        norm = "ortho",
+        axis=1,
+        norm="ortho",
     )
 
-def sfft(
-    tf_grid: np.ndarray,
-) -> np.ndarray:
-    """Apply the Symplectic FFT to recover the DD grid"""
-
     return np.fft.fft(
-        np.fft.ifft(
-            tf_grid,
-            axis=1,
-            norm="ortho",
-        ),
+        temp,
         axis=0,
         norm="ortho",
     )

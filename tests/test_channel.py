@@ -4,7 +4,7 @@ from powder_otfs.channel.channel import apply_channel
 from powder_otfs.channel.path import ChannelPath
 
 
-def test_single_path_channel():
+def test_single_path_channel() -> None:
     waveform = np.array(
         [1, 2, 3, 4],
         dtype=np.complex128,
@@ -14,8 +14,8 @@ def test_single_path_channel():
         ChannelPath(
             delay_samples=0,
             doppler_hz=0.0,
-            gain=1.0 + 0j,
-        )
+            gain=1.0 + 0.0j,
+        ),
     ]
 
     channel = apply_channel(
@@ -32,7 +32,7 @@ def test_single_path_channel():
     )
 
 
-def test_two_path_channel():
+def test_two_path_channel() -> None:
     waveform = np.array(
         [1, 2, 3, 4],
         dtype=np.complex128,
@@ -42,12 +42,12 @@ def test_two_path_channel():
         ChannelPath(
             delay_samples=0,
             doppler_hz=0.0,
-            gain=1.0 + 0j,
+            gain=1.0 + 0.0j,
         ),
         ChannelPath(
             delay_samples=1,
             doppler_hz=0.0,
-            gain=0.5 + 0j,
+            gain=0.5 + 0.0j,
         ),
     ]
 
@@ -59,12 +59,7 @@ def test_two_path_channel():
     )
 
     expected = np.array(
-        [
-            1.0,
-            2.5,
-            4.0,
-            5.5,
-        ],
+        [3.0, 2.5, 4.0, 5.5],
         dtype=np.complex128,
     )
 

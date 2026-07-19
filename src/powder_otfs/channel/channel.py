@@ -1,7 +1,7 @@
 import numpy as np
 
 from powder_otfs.channel.awgn import add_awgn
-from powder_otfs.channel.delay import apply_delay
+from powder_otfs.channel.delay import apply_circular_delay
 from powder_otfs.channel.doppler import apply_doppler
 from powder_otfs.channel.path import ChannelPath
 from powder_otfs.channel.result import ChannelResult
@@ -13,7 +13,7 @@ def apply_channel(
     sample_rate: float,
     snr_db: float,
 ) -> ChannelResult:
-    """Apply multipath propagation and AWGN."""
+    """Apply circular multipath propagation and AWGN."""
 
     if not paths:
         raise ValueError("At least one channel path is required.")
@@ -24,7 +24,7 @@ def apply_channel(
     )
 
     for path in paths:
-        path_waveform = apply_delay(
+        path_waveform = apply_circular_delay(
             waveform,
             path.delay_samples,
         )
