@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 
 from powder_otfs.channel.channel import apply_channel
+from powder_otfs.channel.fading import apply_fading
 from powder_otfs.channel.path import ChannelPath
 from powder_otfs.equalization.zf import zero_forcing_equalizer
 from powder_otfs.equalization.mmse import mmse_equalizer
@@ -37,9 +38,12 @@ def main() -> None:
     qam_order = 4
 
     sample_rate = 1e6
-    snr_db = 100.0
+    snr_db = 30.0
     num_frames = 100
     show_plots = True
+    fading_model = "rayleigh"
+    rician_k = 5.0
+    random_seed = 12345
 
     pilot_value = 4.0 + 0.0j
     threshold_factor = 5.0
@@ -57,6 +61,7 @@ def main() -> None:
     )
 
     equalizer_name = "mmse"
+    rng = np.random.default_rng(random_seed)
 
     # delay samples, Doppler bins, complex gain
     path_definitions = [
@@ -147,6 +152,9 @@ def main() -> None:
     print(f"Doppler Resolution: {doppler_resolution:.3f} Hz")
     print(f"Sample Rate       : {sample_rate:.0f} Hz")
     print(f"SNR               : {snr_db:.1f} dB")
+    print(f"Fading Model      : {fading_model}")
+    if fading_model.lower() == "rician":
+        print(f"Rician K-factor   : {rician_k}")
     print(f"Channel Paths     : {len(paths)}")
 
     for index, (
@@ -184,11 +192,18 @@ def main() -> None:
     debug_plot_data = None
 
     for frame_index in range(num_frames):
-        bits = np.random.randint(
+        bits = rng.integers(
             0,
             2,
             num_bits,
             dtype=np.uint8,
+        )
+
+        frame_paths = apply_fading(
+            paths=paths,
+            model=fading_model,
+            rng=rng,
+            rician_k=rician_k,
         )
 
         tx_symbols = qam_modulate(
@@ -216,7 +231,7 @@ def main() -> None:
 
         channel = apply_channel(
             tx_waveform,
-            paths=paths,
+            paths=frame_paths,
             sample_rate=sample_rate,
             snr_db=snr_db,
         )
@@ -228,7 +243,10 @@ def main() -> None:
         )
         rx_dd_grid = sfft(rx_tf_grid)
 
-        if estimate is None:
+        if (
+            estimate is None
+            or fading_model.lower() != "fixed"
+        ):
             estimation_threshold = (
                 threshold_factor
                 * np.sqrt(channel.noise_variance)
