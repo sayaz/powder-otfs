@@ -1,29 +1,22 @@
 import numpy as np
 
-from powder_otfs.ota.framing import create_preamble
-from powder_otfs.ota.synchronization import find_payload_start
+from powder_otfs.ota.synchronization import (
+    find_payload_start,
+    find_payload_starts,
+)
 
 
 def test_find_payload_start() -> None:
-    preamble = create_preamble(
-        half_length=16,
-        seed=1,
-    )
-
-    leading_samples = np.zeros(
-        25,
-        dtype=np.complex64,
-    )
-    payload = np.ones(
-        20,
+    preamble = np.array(
+        [1, -1, 1j, -1j],
         dtype=np.complex64,
     )
 
     received = np.concatenate(
         (
-            leading_samples,
+            np.zeros(7, dtype=np.complex64),
             preamble,
-            payload,
+            np.zeros(10, dtype=np.complex64),
         )
     )
 
@@ -32,6 +25,31 @@ def test_find_payload_start() -> None:
         preamble=preamble,
     )
 
-    assert payload_start == (
-        len(leading_samples) + len(preamble)
+    assert payload_start == 11
+
+
+def test_find_multiple_payload_starts() -> None:
+    preamble = np.array(
+        [1, -1, 1j, -1j],
+        dtype=np.complex64,
+    )
+
+    received = np.zeros(
+        60,
+        dtype=np.complex64,
+    )
+
+    received[8:12] = preamble
+    received[36:40] = preamble
+
+    payload_starts = find_payload_starts(
+        received=received,
+        preamble=preamble,
+        threshold=0.99,
+        minimum_separation=14,
+    )
+
+    np.testing.assert_array_equal(
+        payload_starts,
+        np.array([12, 40]),
     )
