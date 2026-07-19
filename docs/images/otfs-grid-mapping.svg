@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="720" viewBox="0 0 900 720" role="img" aria-labelledby="title desc">
+  <title id="title">Mapping bits into an OTFS delay-Doppler grid</title>
+  <desc id="desc">A fixed vertical diagram showing bits mapped to QPSK symbols, placed into data bins, and combined with a pilot and guard region.</desc>
+  <defs>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155"/>
+    </marker>
+    <style>
+      .title { font: 700 22px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 600 15px Arial, sans-serif; fill: #0f172a; text-anchor: middle; }
+      .small { font: 400 12px Arial, sans-serif; fill: #334155; text-anchor: middle; }
+      .axis { font: 600 13px Arial, sans-serif; fill: #334155; }
+      .box { stroke: #334155; stroke-width: 1.5; rx: 10; }
+      .line { stroke: #334155; stroke-width: 2; fill: none; marker-end: url(#arrow2); }
+      .cell { stroke: #ffffff; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="900" height="720" fill="#ffffff"/>
+  <text x="450" y="36" class="title" text-anchor="middle">From Information Bits to an OTFS Delay-Doppler Grid</text>
+
+  <rect x="120" y="70" width="660" height="75" class="box" fill="#f1f5f9"/>
+  <text x="450" y="101" class="label">Binary information</text>
+  <text x="450" y="126" class="small">00   01   11   10   00   10   01   11   ...</text>
+
+  <path d="M450 145 V185" class="line"/>
+
+  <rect x="120" y="185" width="660" height="105" class="box" fill="#dbeafe"/>
+  <text x="450" y="213" class="label">QPSK mapper: every two bits become one complex symbol</text>
+  <circle cx="300" cy="250" r="8" fill="#2563eb"/>
+  <circle cx="400" cy="250" r="8" fill="#2563eb"/>
+  <circle cx="500" cy="250" r="8" fill="#2563eb"/>
+  <circle cx="600" cy="250" r="8" fill="#2563eb"/>
+  <text x="300" y="276" class="small">00</text>
+  <text x="400" y="276" class="small">01</text>
+  <text x="500" y="276" class="small">11</text>
+  <text x="600" y="276" class="small">10</text>
+
+  <path d="M450 290 V330" class="line"/>
+
+  <text x="450" y="356" class="label">Place QPSK symbols into the data bins</text>
+
+  <g transform="translate(255,380)">
+    <rect x="0" y="0" width="390" height="240" fill="#2a78b8" stroke="#334155" stroke-width="2"/>
+
+    <g stroke="#ffffff" stroke-width="1" opacity="0.65">
+      <path d="M39 0 V240 M78 0 V240 M117 0 V240 M156 0 V240 M195 0 V240 M234 0 V240 M273 0 V240 M312 0 V240 M351 0 V240"/>
+      <path d="M0 40 H390 M0 80 H390 M0 120 H390 M0 160 H390 M0 200 H390"/>
+    </g>
+
+    <rect x="117" y="80" width="156" height="120" fill="#303030" opacity="0.98"/>
+    <g stroke="#ffffff" stroke-width="1" opacity="0.55">
+      <path d="M156 80 V200 M195 80 V200 M234 80 V200"/>
+      <path d="M117 120 H273 M117 160 H273"/>
+    </g>
+    <rect x="195" y="120" width="39" height="40" fill="#ffd43b" stroke="#ffffff" stroke-width="1"/>
+  </g>
+
+  <text x="450" y="648" class="small">Blue = QPSK data   |   Black = zero guard   |   Yellow = known pilot</text>
+  <text x="215" y="500" class="axis" text-anchor="middle" transform="rotate(-90 215 500)">Delay bins</text>
+  <text x="450" y="686" class="axis" text-anchor="middle">Doppler bins</text>
+</svg>

@@ -1,269 +1,235 @@
 # OTFS Fundamentals
 
-This document introduces the motivation and signal-processing flow behind
-Orthogonal Time Frequency Space (OTFS). It describes the model implemented in
-POWDER-OTFS. Detailed mathematical derivations and measured comparisons with
-OFDM will be added as the project develops.
+This document gives a simple introduction to Orthogonal Time Frequency Space
+(OTFS) and explains the signal flow used in POWDER-OTFS.
 
-## Why another waveform when OFDM already exists?
+## Why OTFS when OFDM already exists?
 
-Orthogonal Frequency Division Multiplexing (OFDM) sends data over many
-orthogonal subcarriers. It is widely used because frequency-selective channels
-can be equalized efficiently when the channel changes slowly during each OFDM
-symbol.
+OFDM sends QAM symbols on many subcarriers. It works very well when the wireless
+channel changes slowly.
 
-High mobility creates Doppler shifts and time variation. These effects can
-break subcarrier orthogonality, create inter-carrier interference, and make the
-channel vary rapidly across time and frequency.
+When a transmitter or receiver moves quickly, the received signal experiences
+Doppler shifts. The channel can then change during an OFDM symbol, causing
+inter-carrier interference and making channel estimation more difficult.
 
-OTFS places information symbols in the delay-Doppler domain instead of directly
-in the time-frequency domain. Delay represents propagation time, while Doppler
-represents frequency shift caused by motion. A sparse physical channel can
-therefore appear as a small collection of delay-Doppler paths.
+OTFS handles the data differently:
 
-OTFS does not eliminate the channel. Its purpose is to represent and process a
-time-varying channel in a domain that is closely related to the channel's
-physical delay and motion.
+- OFDM places data directly in the **time-frequency domain**.
+- OTFS first places data in the **delay-Doppler domain**.
 
-## OFDM and OTFS at a high level
+Delay represents how late a reflected signal arrives. Doppler represents the
+frequency shift caused by motion. These quantities describe the physical paths
+between the transmitter and receiver.
 
-```mermaid
-flowchart TB
-    subgraph OFDM["OFDM"]
-        O1["QAM symbols"] --> O2["Time-frequency resource grid"]
-        O2 --> O3["OFDM modulation"]
-        O3 --> O4["Time-varying channel"]
-        O4 --> O5["OFDM demodulation and equalization"]
-    end
+OTFS still produces a time-domain waveform for transmission. The
+delay-Doppler grid is an additional signal-processing layer that makes a
+time-varying multipath channel easier to represent and estimate.
 
-    subgraph OTFS["OTFS"]
-        T1["QAM symbols"] --> T2["Delay-Doppler grid"]
-        T2 --> T3["2-D OTFS transform"]
-        T3 --> T4["Time-frequency grid"]
-        T4 --> T5["Waveform modulation"]
-        T5 --> T6["Time-varying channel"]
-        T6 --> T7["Waveform demodulation"]
-        T7 --> T8["Inverse 2-D OTFS transform"]
-        T8 --> T9["Delay-Doppler estimation and detection"]
-    end
-```
+## Complete OTFS link
 
-The planned OFDM baseline will use the same modulation, bandwidth, channel, and
-BER measurement settings wherever possible. That will allow meaningful
-OTFS-versus-OFDM comparisons rather than comparisons between unrelated
-configurations.
+The diagram is arranged over several rows so every processing block remains
+readable at normal page width.
 
-## Delay-Doppler grid
+![Complete OTFS transmitter, channel, and receiver](images/otfs-system-model.svg)
 
-The OTFS data grid is represented by:
+## Step 1: Bits become QPSK symbols
+
+The transmitter begins with binary information:
 
 ```text
-X_DD ∈ C^(M × N)
+00  01  11  10
 ```
 
-where:
+QPSK maps every two bits to one complex symbol:
 
-- `M` is the number of delay bins;
-- `N` is the number of Doppler bins;
-- each data bin contains one complex QPSK symbol in the current implementation.
-
-The example also reserves one bin for a known pilot and zeros a rectangular
-guard region around it.
-
-```mermaid
-flowchart LR
-    A["QPSK data symbols"] --> B["Data bins"]
-    C["Known pilot"] --> D["Pilot bin"]
-    E["Zeros"] --> F["Guard bins"]
-    B --> G["Complete delay-Doppler grid"]
-    D --> G
-    F --> G
+```text
+00 -> (+1 + j) / sqrt(2)
+01 -> (+1 - j) / sqrt(2)
+11 -> (-1 - j) / sqrt(2)
+10 -> (-1 + j) / sqrt(2)
 ```
 
-## OTFS transmitter
+The real part is the in-phase component and the imaginary part is the
+quadrature component. The division by `sqrt(2)` gives the constellation unit
+average power.
 
-The transmitter converts the delay-Doppler grid into time-domain complex
-samples.
+## Step 2: QPSK symbols fill the delay-Doppler grid
 
-```mermaid
-flowchart LR
-    A["Bits"] --> B["QPSK symbols"]
-    B --> C["Delay-Doppler grid"]
-    C --> D["Insert pilot and guards"]
-    D --> E["ISFFT"]
-    E --> F["Time-frequency grid"]
-    F --> G["Heisenberg transform"]
-    G --> H["Complex waveform"]
+The QPSK symbols are placed into a two-dimensional array:
+
+```text
+X_DD has shape M x N
 ```
 
-The project uses unitary FFT normalization (`norm="ortho"`) throughout.
+- `M` is the number of delay bins.
+- `N` is the number of Doppler bins.
+- Most bins contain QPSK data.
+- One bin contains a known pilot.
+- Bins around the pilot are set to zero and form the guard region.
 
-### ISFFT
+The pilot is stronger than a normal data symbol. After the channel shifts and
+scales it, the receiver uses the resulting pilot copies to estimate the channel
+paths.
 
-The inverse symplectic finite Fourier transform maps the delay-Doppler grid to
-the time-frequency grid. In the current convention, the implementation applies:
+![Mapping bits to the delay-Doppler grid](images/otfs-grid-mapping.svg)
+
+## Step 3: Delay-Doppler becomes time-frequency
+
+The delay-Doppler grid is not transmitted directly. The ISFFT converts it into
+a time-frequency grid.
+
+In this project, the ISFFT applies:
 
 1. an inverse FFT along the delay axis;
 2. an FFT along the Doppler axis.
 
-Using one explicit convention consistently is essential because OTFS papers and
-implementations may use different axis orders and FFT signs.
+The result has the same `M x N` shape, but its meaning has changed:
 
-### Heisenberg transform
+- each row represents a subcarrier;
+- each column represents a time slot.
 
-The Heisenberg stage converts each time-frequency column into time-domain
-samples using an inverse FFT along the subcarrier axis. The columns are then
-serialized in Fortran order so the samples of each time slot remain
-consecutive.
+Every delay-Doppler symbol contributes to multiple time-frequency samples. This
+spreads each information symbol across the frame instead of assigning it to
+only one time-frequency location.
 
-## Channel model
+## Step 4: Time-frequency becomes a waveform
 
-The simulated received waveform is the sum of multiple propagation paths:
+The Heisenberg transform applies an inverse FFT across the subcarriers of every
+time slot. This produces time-domain samples.
 
-```text
-r(t) = Σ h_p s(t - τ_p) exp(j 2π ν_p t) + w(t)
-```
-
-For path `p`:
-
-- `h_p` is its complex gain;
-- `τ_p` is its delay;
-- `ν_p` is its Doppler shift;
-- `w(t)` is complex AWGN.
-
-```mermaid
-flowchart LR
-    TX["Transmit waveform"] --> P1["Path 1<br/>delay, Doppler, gain"]
-    TX --> P2["Path 2<br/>delay, Doppler, gain"]
-    TX --> PN["Path P<br/>delay, Doppler, gain"]
-    P1 --> SUM["Sum paths"]
-    P2 --> SUM
-    PN --> SUM
-    SUM --> N["Add complex AWGN"]
-    N --> RX["Received waveform"]
-```
-
-The current channel uses circular integer-sample delays. This keeps the frame
-length fixed and represents an effective cyclic-prefix-protected,
-timing-aligned observation. Explicit cyclic-prefix insertion and removal are
-not implemented yet.
-
-The current pilot estimator supports Doppler shifts located exactly on Doppler
-bins:
+The columns are then placed one after another:
 
 ```text
-Δν = sample_rate / (M N)
-ν_p = k_p Δν
+time slot 0 samples
+time slot 1 samples
+...
+time slot N-1 samples
 ```
 
-Fractional Doppler will spread energy across multiple bins and requires a more
-advanced estimator and detector.
+The result is one complex waveform containing `M x N` samples. This waveform is
+what the simulated channel receives and what a future USRP transmitter will
+send.
 
-## Fading models
+## Step 5: The wireless channel changes the waveform
 
-The base complex gain of each path can be used directly or multiplied by a
-random fading coefficient:
+A received signal normally contains several copies of the transmitted
+waveform. Each propagation path can have:
 
-- **Fixed:** no random fading multiplier.
-- **Rayleigh:** complex zero-mean Gaussian fading, suitable when no dominant
-  line-of-sight component is modeled.
-- **Rician:** a deterministic line-of-sight component plus a scattered random
-  component controlled by the Rician K-factor.
+- a different delay;
+- a different Doppler shift;
+- a different complex gain.
 
-The example generates a new fading realization per frame for Rayleigh and
-Rician operation.
-
-## OTFS receiver
-
-```mermaid
-flowchart LR
-    A["Received waveform"] --> B["Wigner transform"]
-    B --> C["Received time-frequency grid"]
-    C --> D["SFFT"]
-    D --> E["Received delay-Doppler grid"]
-    E --> F["Pilot observation"]
-    F --> G["Channel estimation"]
-    E --> H["Equalizer"]
-    G --> H
-    H --> I["Equalized QPSK symbols"]
-    I --> J["Hard decisions"]
-    J --> K["Recovered bits"]
-```
-
-The Wigner transform reverses the waveform modulation. The SFFT then returns
-the received signal to the delay-Doppler domain using the inverse operations of
-the transmitter convention.
-
-## Embedded-pilot channel estimation
-
-A path shifts and scales the known pilot. The receiver searches the configured
-pilot-observation region for bins above a noise-dependent threshold.
-
-```mermaid
-flowchart LR
-    A["Received DD grid"] --> B["Extract pilot region"]
-    B --> C["Threshold magnitudes"]
-    C --> D["Detected pilot copies"]
-    D --> E["Estimate delay and Doppler"]
-    E --> F["Estimate complex path gains"]
-    F --> G["Construct channel matrix"]
-```
-
-The example uses:
+The channel adds all path contributions and then adds complex AWGN:
 
 ```text
-threshold = threshold_factor × sqrt(noise_variance)
+r(t) = sum of delayed, Doppler-shifted, scaled copies of s(t) + noise
 ```
 
-A threshold that is too low can classify noise as paths. A threshold that is
-too high can miss weak paths.
+The current model uses circular integer-sample delays. This keeps the frame
+length fixed and represents a cyclic-prefix-protected, timing-aligned frame.
+Explicit cyclic-prefix insertion and removal are not implemented yet.
 
-The estimator reconstructs the complete channel matrix by passing every
-delay-Doppler basis vector through the estimated paths. This is clear and
-useful for validation, but computationally expensive for larger grids.
+### Fading
 
-## Equalization
+The path gains can use one of three models:
 
-The received delay-Doppler grid is flattened into:
+- **Fixed:** the configured complex gain does not change.
+- **Rayleigh:** the gain changes randomly with no dominant line-of-sight path.
+- **Rician:** a line-of-sight component is combined with random scattering.
+
+For Rayleigh and Rician fading, the example generates new gains for every
+frame.
+
+## Step 6: The receiver returns to the delay-Doppler domain
+
+The receiver reverses the transmitter transforms:
+
+1. The **Wigner transform** converts the received waveform into a received
+   time-frequency grid.
+2. The **SFFT** converts the time-frequency grid into a received
+   delay-Doppler grid.
+
+The received grid is not yet the transmitted grid. It contains shifted and
+scaled contributions from the channel paths, plus noise.
+
+## Step 7: The pilot estimates the channel
+
+The receiver looks only inside the configured pilot-observation region.
+Channel paths create shifted copies of the known pilot.
+
+For every detected pilot copy, the estimator obtains:
+
+- delay from its vertical displacement;
+- Doppler from its horizontal displacement;
+- complex gain from its value relative to the known pilot.
+
+Only pilot responses above this threshold are accepted:
+
+```text
+threshold = threshold_factor * sqrt(noise_variance)
+```
+
+A low threshold can detect noise as false paths. A high threshold can miss weak
+paths.
+
+The current estimator assumes integer delay and grid-aligned Doppler:
+
+```text
+Doppler resolution = sample_rate / (M * N)
+Doppler shift = Doppler bin * Doppler resolution
+```
+
+Fractional delay and fractional Doppler require a more advanced estimator.
+
+## Step 8: Equalization removes the estimated channel
+
+After channel estimation, the receiver uses:
 
 ```text
 y = Hx + n
 ```
 
-where `H` is the estimated channel matrix.
+- `x` is the transmitted delay-Doppler symbol vector.
+- `H` is the estimated channel matrix.
+- `y` is the received vector.
+- `n` is noise.
 
-### Zero Forcing
+The project provides two equalizers:
 
-The ZF equalizer solves a least-squares problem:
+- **Zero Forcing (ZF):** finds the least-squares solution. It can amplify noise
+  when the channel matrix is poorly conditioned.
+- **MMSE:** includes the estimated noise variance and is generally more stable
+  for noisy multipath channels.
+
+The equalized symbols should cluster around the four QPSK constellation points.
+The QPSK demodulator then converts their signs back into bits.
+
+## Step 9: BER measures the recovered data
+
+The bit error rate is:
 
 ```text
-x_hat = arg min ||Hx - y||²
+BER = incorrect recovered bits / total transmitted data bits
 ```
 
-ZF can strongly amplify noise when `H` is poorly conditioned.
+The pilot and guard bins are excluded because they do not carry user data.
+The example accumulates errors over multiple OTFS frames.
 
-### MMSE
+Zero BER at high SNR is possible for the current grid-aligned simulation. It
+does not guarantee zero BER with fractional Doppler, synchronization errors, or
+real OTA hardware.
 
-The linear MMSE equalizer uses:
+## OTFS and OFDM comparison
 
-```text
-x_hat = (HᴴH + (σ²/E_s)I)^(-1) Hᴴy
-```
+An OFDM baseline has not been implemented yet. A fair future comparison should
+use the same:
 
-The regularization term uses the channel noise variance `σ²` and assumed symbol
-energy `E_s`. This generally makes MMSE more stable than ZF in noisy or
-ill-conditioned channels.
+- QAM order;
+- bandwidth and sample rate;
+- transmitted information bits;
+- channel paths and noise realization;
+- pilot overhead;
+- number of frames.
 
-## Planned OFDM comparison
-
-The OFDM comparison is not implemented yet. When added, it should report at
-least:
-
-- BER versus SNR;
-- BER versus Doppler or vehicle speed;
-- channel-estimation error;
-- computational cost;
-- spectral efficiency after pilot and guard overhead.
-
-Plots must use the same random data, modulation order, channel realization,
-frame count, and power normalization for both waveforms.
+The comparison should include BER versus SNR, BER versus Doppler or vehicle
+speed, channel-estimation error, computational cost, and spectral efficiency.

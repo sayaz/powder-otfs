@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="690" viewBox="0 0 960 690" role="img" aria-labelledby="title desc">
+  <title id="title">Complete OTFS system model</title>
+  <desc id="desc">A fixed three-row diagram showing the OTFS transmitter, wireless channel, and receiver.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155"/>
+    </marker>
+    <style>
+      .title { font: 700 22px Arial, sans-serif; fill: #0f172a; }
+      .section { font: 700 17px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 600 14px Arial, sans-serif; fill: #0f172a; text-anchor: middle; }
+      .small { font: 400 12px Arial, sans-serif; fill: #334155; text-anchor: middle; }
+      .box { stroke: #334155; stroke-width: 1.5; rx: 10; }
+      .tx { fill: #dbeafe; }
+      .channel { fill: #ffedd5; }
+      .rx { fill: #dcfce7; }
+      .metric { fill: #f3e8ff; }
+      .line { stroke: #334155; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="960" height="690" fill="#ffffff"/>
+  <text x="480" y="36" class="title" text-anchor="middle">OTFS Transmitter, Channel, and Receiver</text>
+
+  <text x="34" y="82" class="section">Transmitter</text>
+  <rect x="35" y="105" width="150" height="70" class="box tx"/>
+  <text x="110" y="135" class="label">Information bits</text>
+  <text x="110" y="157" class="small">0 and 1</text>
+
+  <rect x="225" y="105" width="150" height="70" class="box tx"/>
+  <text x="300" y="135" class="label">QPSK mapping</text>
+  <text x="300" y="157" class="small">2 bits per symbol</text>
+
+  <rect x="415" y="105" width="150" height="70" class="box tx"/>
+  <text x="490" y="130" class="label">Delay-Doppler grid</text>
+  <text x="490" y="152" class="small">data + pilot + guards</text>
+
+  <rect x="605" y="105" width="130" height="70" class="box tx"/>
+  <text x="670" y="135" class="label">ISFFT</text>
+  <text x="670" y="157" class="small">DD to TF</text>
+
+  <rect x="775" y="105" width="150" height="70" class="box tx"/>
+  <text x="850" y="130" class="label">Heisenberg</text>
+  <text x="850" y="152" class="small">TF to waveform</text>
+
+  <path d="M185 140 H225" class="line"/>
+  <path d="M375 140 H415" class="line"/>
+  <path d="M565 140 H605" class="line"/>
+  <path d="M735 140 H775" class="line"/>
+
+  <path d="M850 175 V222 H480 V250" class="line"/>
+
+  <text x="34" y="266" class="section">Wireless channel</text>
+  <rect x="205" y="285" width="550" height="95" class="box channel"/>
+  <text x="480" y="315" class="label">Multipath delay-Doppler channel</text>
+  <text x="480" y="340" class="small">Each path has delay, Doppler, and complex gain</text>
+  <text x="480" y="362" class="small">Fixed / Rayleigh / Rician fading + complex AWGN</text>
+
+  <path d="M480 380 V430" class="line"/>
+
+  <text x="34" y="446" class="section">Receiver</text>
+  <rect x="775" y="465" width="150" height="70" class="box rx"/>
+  <text x="850" y="495" class="label">Wigner</text>
+  <text x="850" y="517" class="small">waveform to TF</text>
+
+  <rect x="605" y="465" width="130" height="70" class="box rx"/>
+  <text x="670" y="495" class="label">SFFT</text>
+  <text x="670" y="517" class="small">TF to DD</text>
+
+  <rect x="405" y="465" width="160" height="70" class="box rx"/>
+  <text x="485" y="491" class="label">Pilot estimator</text>
+  <text x="485" y="513" class="small">estimate channel paths</text>
+
+  <rect x="215" y="465" width="150" height="70" class="box rx"/>
+  <text x="290" y="491" class="label">ZF or MMSE</text>
+  <text x="290" y="513" class="small">equalize symbols</text>
+
+  <rect x="35" y="465" width="140" height="70" class="box rx"/>
+  <text x="105" y="491" class="label">QPSK decisions</text>
+  <text x="105" y="513" class="small">symbols to bits</text>
+
+  <path d="M480 430 H850 V465" class="line"/>
+  <path d="M775 500 H735" class="line"/>
+  <path d="M605 500 H565" class="line"/>
+  <path d="M405 500 H365" class="line"/>
+  <path d="M215 500 H175" class="line"/>
+
+  <path d="M105 535 V590 H350" class="line"/>
+  <rect x="350" y="565" width="260" height="75" class="box metric"/>
+  <text x="480" y="596" class="label">Compare transmitted and recovered bits</text>
+  <text x="480" y="620" class="small">Count bit errors and calculate BER</text>
+</svg>
