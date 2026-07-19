@@ -16,8 +16,9 @@ radio workbench. Each server connects to one NI X310 through a dedicated
 The X310 radios are connected through fixed 30 dB attenuators and share an
 external 10 MHz clock and PPS reference.
 
-The profile automatically installs UHD, GNU Radio, and the POWDER-OTFS Python
-package.
+The profile automatically installs UHD, GNU Radio, and POWDER-OTFS under the
+POWDER user's home directory. The Python environment activates automatically
+when the user logs in.
 """
 
 INSTRUCTIONS = """
@@ -26,9 +27,10 @@ Wait until the startup status for both `tx` and `rx` reports `Finished`.
 The project is available on both compute nodes at:
 
 ```bash
-cd /local/repository
-source .venv/bin/activate
+cd ~/powder-otfs
 ```
+
+The Python environment is activated automatically at login.
 
 Verify X310 access on both nodes:
 
@@ -48,21 +50,26 @@ The SISO conducted-RF connection uses:
 Start the receiver first on `rx`:
 
 ```bash
-cd /local/repository
-source .venv/bin/activate
+cd ~/powder-otfs
 python examples/ota/x310_rx.py
 ```
 
 Immediately afterward, start the transmitter on `tx`:
 
 ```bash
-cd /local/repository
-source .venv/bin/activate
+cd ~/powder-otfs
 python examples/ota/x310_tx.py
 ```
 
-The receiver prints the detected payload position, estimated complex channel
-gain, symbol mean-squared error, and bit error rate.
+The receiver reports multi-frame synchronization and BER results. It also saves
+the complete complex-IQ capture as:
+
+```text
+~/powder-otfs/results/rx_samples.npy
+```
+
+See `docs/ota-guide.md` for instructions to copy the capture to another
+computer for offline analysis and plotting.
 """
 
 COMPONENT_MANAGER_ID = (

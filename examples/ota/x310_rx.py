@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 
 from powder_otfs.modulation.qam import (
@@ -26,6 +28,8 @@ def main() -> None:
     channel = 0
     antenna = "RX2"
     capture_samples = 6_000_000
+    save_received_samples = True
+    received_samples_path = Path("results/rx_samples.npy")
 
     num_delay_bins = 32
     num_doppler_bins = 16
@@ -90,6 +94,9 @@ def main() -> None:
     print(f"RX Antenna           : {antenna}")
     print(f"Capture Samples      : {capture_samples}")
     print(f"Capture Duration     : {capture_samples / sample_rate:.3f} s")
+    print(f"Save IQ Samples      : {save_received_samples}")
+    if save_received_samples:
+        print(f"IQ Output File       : {received_samples_path}")
     print(f"Modulation           : {qam_order}-QAM")
     print(f"DD Grid              : {num_delay_bins} x {num_doppler_bins}")
     print(f"Payload              : {payload_samples} samples")
@@ -118,6 +125,20 @@ def main() -> None:
         channel=channel,
         timeout=5.0,
     )
+
+    if save_received_samples:
+        received_samples_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        np.save(
+            received_samples_path,
+            received,
+        )
+        print(
+            f"Received IQ saved to "
+            f"{received_samples_path.resolve()}"
+        )
 
     print("Capture complete. Detecting frames...")
 
