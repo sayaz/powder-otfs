@@ -6,6 +6,10 @@ from powder_otfs.modulation.qam import (
     qam_demodulate,
     qam_modulate,
 )
+from powder_otfs.ota.frequency_offset import (
+    correct_cfo,
+    estimate_cfo,
+)
 from powder_otfs.ota.framing import create_preamble
 from powder_otfs.ota.synchronization import (
     find_payload_starts,
@@ -105,6 +109,7 @@ def main() -> None:
     print(f"Guard                : {guard_samples} samples per side")
     print(f"Complete Frame       : {frame_length} samples")
     print(f"Sync Threshold       : {synchronization_threshold:.2f}")
+    print("CFO Correction       : Enabled")
     print(
         "=======================================================\n"
     )
@@ -156,6 +161,7 @@ def main() -> None:
     frame_bers: list[float] = []
     symbol_mses: list[float] = []
     channel_gains: list[complex] = []
+    cfo_estimates_hz: list[float] = []
 
     for payload_start in payload_starts:
         preamble_start = (
@@ -174,13 +180,32 @@ def main() -> None:
             rejected_frames += 1
             continue
 
-        received_preamble = received[
-            preamble_start:payload_start
+        received_frame = received[
+            preamble_start:payload_end
+        ]
+
+        received_preamble = received_frame[
+            :len(preamble)
+        ]
+
+        cfo_hz = estimate_cfo(
+            repeated_preamble=received_preamble,
+            sample_rate=sample_rate,
+        )
+
+        corrected_frame = correct_cfo(
+            samples=received_frame,
+            cfo_hz=cfo_hz,
+            sample_rate=sample_rate,
+        )
+
+        corrected_preamble = corrected_frame[
+            :len(preamble)
         ]
 
         channel_gain = np.vdot(
             preamble,
-            received_preamble,
+            corrected_preamble,
         ) / np.vdot(
             preamble,
             preamble,
@@ -190,8 +215,8 @@ def main() -> None:
             rejected_frames += 1
             continue
 
-        received_payload = received[
-            payload_start:payload_end
+        received_payload = corrected_frame[
+            len(preamble):
         ]
 
         corrected_payload = (
@@ -245,6 +270,7 @@ def main() -> None:
         frame_bers.append(frame_ber)
         symbol_mses.append(symbol_mse)
         channel_gains.append(channel_gain)
+        cfo_estimates_hz.append(cfo_hz)
 
     if processed_frames == 0:
         raise RuntimeError(
@@ -264,6 +290,9 @@ def main() -> None:
     gain_magnitudes = np.abs(
         np.asarray(channel_gains)
     )
+    cfo_estimates = np.asarray(
+        cfo_estimates_hz
+    )
 
     print(
         "\n========== X310 OTFS Multi-Frame Result =========="
@@ -279,6 +308,10 @@ def main() -> None:
     print(f"Maximum Frame BER     : {np.max(frame_bers):.6f}")
     print(f"Mean Symbol MSE       : {np.mean(symbol_mses):.6e}")
     print(f"Mean Channel Magnitude: {np.mean(gain_magnitudes):.6e}")
+    print(f"Mean CFO Estimate     : {np.mean(cfo_estimates):.3f} Hz")
+    print(f"CFO Standard Deviation: {np.std(cfo_estimates):.3f} Hz")
+    print(f"Minimum CFO Estimate  : {np.min(cfo_estimates):.3f} Hz")
+    print(f"Maximum CFO Estimate  : {np.max(cfo_estimates):.3f} Hz")
     print(
         "===================================================\n"
     )

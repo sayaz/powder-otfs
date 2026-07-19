@@ -32,13 +32,6 @@ cd ~/powder-otfs
 
 The Python environment is activated automatically at login.
 
-Verify X310 access on both nodes:
-
-```bash
-uhd_find_devices
-uhd_usrp_probe --args "addr=192.168.40.2"
-```
-
 The SISO conducted-RF connection uses:
 
 - TX node: channel 0, `TX/RX` port
@@ -61,8 +54,9 @@ cd ~/powder-otfs
 python examples/ota/x310_tx.py
 ```
 
-The receiver reports multi-frame synchronization and BER results. It also saves
-the complete complex-IQ capture as:
+The receiver performs multi-frame synchronization, CFO estimation and
+correction, and BER measurement. It also saves the complete complex-IQ capture
+as:
 
 ```text
 ~/powder-otfs/results/rx_samples.npy

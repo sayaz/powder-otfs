@@ -11,12 +11,14 @@ cd ~/powder-otfs
 
 The Python environment activates automatically when you log in.
 
-Verify the X310 on both nodes:
+X310 discovery can be checked when troubleshooting:
 
 ```bash
 uhd_find_devices
 uhd_usrp_probe --args "addr=192.168.40.2"
 ```
+
+This check is optional during normal use.
 
 ## Run the link
 
@@ -34,7 +36,8 @@ cd ~/powder-otfs
 python examples/ota/x310_tx.py
 ```
 
-The receiver saves the complete complex-IQ capture at:
+The receiver detects multiple frames, estimates and corrects CFO for every
+frame, reports aggregate BER, and saves the complete complex-IQ capture at:
 
 ```text
 ~/powder-otfs/results/rx_samples.npy
