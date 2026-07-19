@@ -9,37 +9,60 @@ import geni.rspec.pg as rspec
 DESCRIPTION = """
 # POWDER-OTFS Paired Radio Workbench
 
-This profile allocates two server-class compute nodes and one POWDER paired
-radio workbench. Each compute node connects to one NI X310 over a dedicated
-10 Gb/s link. The X310 RF ports are connected through fixed 30 dB attenuators.
+This profile creates a two-node SISO OTFS experiment using one POWDER paired
+radio workbench. Each server connects to one NI X310 through a dedicated
+10 Gb/s Ethernet link.
 
-The profile installs UHD, GNU Radio, and the POWDER-OTFS Python package. It does
-not install or start OAI.
+The X310 radios are connected through fixed 30 dB attenuators and share an
+external 10 MHz clock and PPS reference.
+
+The profile automatically installs UHD, GNU Radio, and the POWDER-OTFS Python
+package.
 """
 
 INSTRUCTIONS = """
 Wait until the startup status for both `tx` and `rx` reports `Finished`.
 
-Open a shell on each compute node and activate the project environment:
+The project is available on both compute nodes at:
 
 ```bash
 cd /local/repository
 source .venv/bin/activate
 ```
 
-Confirm radio access:
+Verify X310 access on both nodes:
 
 ```bash
 uhd_find_devices
 uhd_usrp_probe --args "addr=192.168.40.2"
 ```
 
-The intended roles are:
+The SISO conducted-RF connection uses:
 
-- `tx`: OTFS transmitter connected to `tx-sdr`
-- `rx`: OTFS receiver connected to `rx-sdr`
+- TX node: channel 0, `TX/RX` port
+- RX node: channel 0, `RX2` port
+- Fixed path attenuation: 30 dB
+- Default center frequency: 3.5 GHz
+- Default sample rate: 1 MS/s
 
-Do not run transmitter code until the UHD checks succeed on both nodes.
+Start the receiver first on `rx`:
+
+```bash
+cd /local/repository
+source .venv/bin/activate
+python examples/ota/x310_rx.py
+```
+
+Immediately afterward, start the transmitter on `tx`:
+
+```bash
+cd /local/repository
+source .venv/bin/activate
+python examples/ota/x310_tx.py
+```
+
+The receiver prints the detected payload position, estimated complex channel
+gain, symbol mean-squared error, and bit error rate.
 """
 
 COMPONENT_MANAGER_ID = (
