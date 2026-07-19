@@ -35,5 +35,10 @@ python3 -m venv \
     --system-site-packages \
     .venv
 
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e .
+.venv/bin/python -m pip install \
+    --upgrade \
+    pip \
+    setuptools \
+    wheel
+
+.venv/bin/python -m pip install .
