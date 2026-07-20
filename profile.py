@@ -16,6 +16,11 @@ radio workbench. Each server connects to one NI X310 through a dedicated
 The X310 radios are connected through fixed 30 dB attenuators and share an
 external 10 MHz clock and PPS reference.
 
+The transmitted OTFS waveform uses QPSK data, an embedded delay-Doppler pilot,
+a configurable delay-Doppler guard region, and a cyclic prefix. The receiver
+performs frame synchronization, CFO correction, pilot-based delay-Doppler
+channel estimation, and selectable ZF or MMSE equalization.
+
 The profile automatically installs UHD, GNU Radio, and POWDER-OTFS under the
 POWDER user's home directory. The Python environment activates automatically
 when the user logs in.

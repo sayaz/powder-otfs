@@ -46,21 +46,35 @@ def build_ota_frame(
     payload: np.ndarray,
     preamble: np.ndarray,
     guard_samples: int = 128,
+    cyclic_prefix_samples: int = 0,
 ) -> np.ndarray:
-    """Build one OTA frame containing guards, preamble, and payload."""
+    """Build one OTA frame with guards, preamble, CP, and payload."""
 
     if guard_samples < 0:
         raise ValueError("guard_samples must be non-negative.")
 
+    if not 0 <= cyclic_prefix_samples <= len(payload):
+        raise ValueError(
+            "cyclic_prefix_samples must be between 0 "
+            "and the payload length."
+        )
+
     guard = np.zeros(
         guard_samples,
         dtype=np.complex64,
+    )
+    cyclic_prefix = payload[
+        len(payload) - cyclic_prefix_samples:
+    ] if cyclic_prefix_samples else np.empty(
+        0,
+        dtype=payload.dtype,
     )
 
     return np.concatenate(
         (
             guard,
             preamble.astype(np.complex64),
+            cyclic_prefix.astype(np.complex64),
             payload.astype(np.complex64),
             guard,
         )

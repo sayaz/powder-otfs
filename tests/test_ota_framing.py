@@ -59,6 +59,45 @@ def test_build_ota_frame() -> None:
     np.testing.assert_array_equal(frame, expected)
 
 
+def test_build_ota_frame_with_cyclic_prefix() -> None:
+    payload = np.array(
+        [1, 2, 3, 4],
+        dtype=np.complex64,
+    )
+    preamble = np.array(
+        [5, 6],
+        dtype=np.complex64,
+    )
+
+    frame = build_ota_frame(
+        payload=payload,
+        preamble=preamble,
+        guard_samples=1,
+        cyclic_prefix_samples=2,
+    )
+
+    expected = np.array(
+        [
+            0,
+            5,
+            6,
+            3,
+            4,
+            1,
+            2,
+            3,
+            4,
+            0,
+        ],
+        dtype=np.complex64,
+    )
+
+    np.testing.assert_array_equal(
+        frame,
+        expected,
+    )
+
+
 def test_normalize_waveform() -> None:
     waveform = np.array(
         [1 + 1j, 2 + 2j],

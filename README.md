@@ -63,16 +63,18 @@ python examples/end_to_end.py --num-paths 5
   from OFDM, and how the transmitter and receiver work.
 - [Simulation guide](docs/simulation-guide.md): installation, parameters,
   running experiments, interpreting output, and debugging.
-- [POWDER OTA guide](docs/ota-guide.md): workbench startup, X310 transmission,
-  IQ capture, and offline plotting.
+- [POWDER OTA guide](docs/ota-guide.md): workbench startup, pilot-bearing X310
+  transmission, IQ capture, channel estimation, equalization, and offline
+  plotting.
 
 ## Current limitations
 
 The current implementation is SISO and supports QPSK, integer-sample delays,
-and grid-aligned Doppler estimation. The offline X310 link currently uses frame
-synchronization and scalar channel-gain correction. It does not yet include
-explicit cyclic-prefix processing, fractional delay/Doppler estimation, CFO
-correction, FEC, or standardized channel profiles.
+and grid-aligned Doppler estimation. The offline X310 link uses a time-domain
+preamble for frame synchronization and CFO correction, a cyclic prefix, an
+embedded DD pilot, pilot-based channel estimation, and ZF or MMSE equalization.
+It does not yet include fractional delay/Doppler estimation, FEC, or
+standardized channel profiles.
 
 ## Roadmap
 
