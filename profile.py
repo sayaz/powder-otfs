@@ -21,9 +21,9 @@ a configurable delay-Doppler guard region, and a cyclic prefix. The receiver
 performs frame synchronization, CFO correction, pilot-based delay-Doppler
 channel estimation, and selectable ZF or MMSE equalization.
 
-The profile automatically installs UHD, GNU Radio, and POWDER-OTFS under the
-POWDER user's home directory. The Python environment activates automatically
-when the user logs in.
+The profile automatically installs UHD, GNU Radio, Python dependencies, and
+POWDER-OTFS under the POWDER user's home directory. No Python virtual
+environment or manual activation is required.
 """
 
 INSTRUCTIONS = """
@@ -35,7 +35,8 @@ The project is available on both compute nodes at:
 cd ~/powder-otfs
 ```
 
-The Python environment is activated automatically at login.
+The project uses the compute node's system Python. `PYTHONPATH` is configured
+automatically at login; no virtual-environment activation is required.
 
 The SISO conducted-RF connection uses:
 
@@ -49,14 +50,14 @@ Start the receiver first on `rx`:
 
 ```bash
 cd ~/powder-otfs
-python examples/ota/x310_rx.py
+python3 examples/ota/x310_rx.py
 ```
 
 Immediately afterward, start the transmitter on `tx`:
 
 ```bash
 cd ~/powder-otfs
-python examples/ota/x310_tx.py
+python3 examples/ota/x310_tx.py
 ```
 
 The receiver performs multi-frame synchronization, CFO estimation and

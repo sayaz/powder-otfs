@@ -9,7 +9,8 @@ node. The project is installed at:
 cd ~/powder-otfs
 ```
 
-The Python environment activates automatically when you log in.
+The profile configures the system Python and `PYTHONPATH` automatically. No
+virtual environment or activation command is required.
 
 X310 discovery can be checked when troubleshooting:
 
@@ -26,14 +27,14 @@ Start the receiver first on the `rx` node:
 
 ```bash
 cd ~/powder-otfs
-python examples/ota/x310_rx.py
+python3 examples/ota/x310_rx.py
 ```
 
 Then start the transmitter on the `tx` node:
 
 ```bash
 cd ~/powder-otfs
-python examples/ota/x310_tx.py
+python3 examples/ota/x310_tx.py
 ```
 
 The OTA waveform contains:

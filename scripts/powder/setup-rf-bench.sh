@@ -9,9 +9,10 @@ apt-get install -y \
     git \
     gnuradio \
     libuhd-dev \
+    python3-matplotlib \
+    python3-numpy \
     python3-pip \
     python3-uhd \
-    python3-venv \
     rsync \
     uhd-host
 
@@ -47,39 +48,35 @@ rsync -a \
     /local/repository/ \
     "${project_dir}/"
 
+rm -rf "${project_dir}/.venv"
+
 chown -R \
     "${project_user}:${project_group}" \
     "${project_dir}"
 
-sudo -u "${project_user}" \
-    python3 -m venv \
-    --system-site-packages \
-    "${project_dir}/.venv"
-
-sudo -u "${project_user}" \
-    "${project_dir}/.venv/bin/python" -m pip install \
-    --upgrade \
-    pip \
-    setuptools \
-    wheel
-
-sudo -u "${project_user}" \
-    "${project_dir}/.venv/bin/python" -m pip install \
-    "${project_dir}"
-
 bashrc="${project_home}/.bashrc"
-activation_marker="# POWDER-OTFS automatic environment"
+old_activation_marker="# POWDER-OTFS automatic environment"
+pythonpath_marker="# POWDER-OTFS Python path"
 
-if ! grep -Fq "${activation_marker}" "${bashrc}"; then
+if grep -Fq "${old_activation_marker}" "${bashrc}"; then
+    sed -i \
+        "/${old_activation_marker}/,+3d" \
+        "${bashrc}"
+fi
+
+if ! grep -Fq "${pythonpath_marker}" "${bashrc}"; then
     {
         echo
-        echo "${activation_marker}"
-        echo "if [ -f \"${project_dir}/.venv/bin/activate\" ]; then"
-        echo "    source \"${project_dir}/.venv/bin/activate\""
-        echo "fi"
+        echo "${pythonpath_marker}"
+        echo "export PYTHONPATH=\"${project_dir}/src\${PYTHONPATH:+:\${PYTHONPATH}}\""
     } >> "${bashrc}"
 fi
 
 chown \
     "${project_user}:${project_group}" \
     "${bashrc}"
+
+sudo -u "${project_user}" \
+    env PYTHONPATH="${project_dir}/src" \
+    python3 -c \
+    "import numpy, powder_otfs, uhd"
