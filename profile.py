@@ -17,7 +17,7 @@ Each B210 is USB-attached to its corresponding `ota-nuc` compute node. Each
 X310 is connected through a dedicated 10 Gb/s link to a server-class compute
 node.
 
-The experiment requests the reserved 3550–3570 MHz spectrum range and installs
+The experiment requests the reserved 3550-3570 MHz spectrum range and installs
 POWDER-OTFS and its dependencies automatically.
 """
 
