@@ -27,9 +27,6 @@ time-varying multipath channel easier to represent and estimate.
 
 ## Complete OTFS link
 
-The diagram is arranged over several rows so every processing block remains
-readable at normal page width.
-
 ![Complete OTFS transmitter, channel, and receiver](images/otfs-system-model.svg)
 
 ## Step 1: Bits become QPSK symbols
@@ -125,9 +122,10 @@ The channel adds all path contributions and then adds complex AWGN:
 r(t) = sum of delayed, Doppler-shifted, scaled copies of s(t) + noise
 ```
 
-The current model uses circular integer-sample delays. This keeps the frame
-length fixed and represents a cyclic-prefix-protected, timing-aligned frame.
-Explicit cyclic-prefix insertion and removal are not implemented yet.
+The simulation uses circular integer-sample delays. This keeps the frame length
+fixed and represents a cyclic-prefix-protected, timing-aligned frame. The OTA
+waveform inserts a cyclic prefix before transmission and removes it at the
+receiver.
 
 ### Fading
 
@@ -152,59 +150,120 @@ The receiver reverses the transmitter transforms:
 The received grid is not yet the transmitted grid. It contains shifted and
 scaled contributions from the channel paths, plus noise.
 
-## Step 7: The pilot estimates the channel
+## Step 7: The embedded pilot estimates the paths
 
-The receiver looks only inside the configured pilot-observation region.
-Channel paths create shifted copies of the known pilot.
+The receiver knows the transmitted pilot's position and complex value. It
+examines only the configured observation region around that position. The zero
+guard prevents data symbols from hiding the shifted pilot copies.
 
-For every detected pilot copy, the estimator obtains:
-
-- delay from its vertical displacement;
-- Doppler from its horizontal displacement;
-- complex gain from its value relative to the known pilot.
-
-Only pilot responses above this threshold are accepted:
+A channel path moves the pilot to another DD bin and multiplies it by a complex
+gain. The receiver keeps bins whose magnitude satisfies:
 
 ```text
-threshold = threshold_factor * sqrt(noise_variance)
+received magnitude >= threshold_factor * sqrt(noise variance)
 ```
 
-A low threshold can detect noise as false paths. A high threshold can miss weak
-paths.
-
-The current estimator assumes integer delay and grid-aligned Doppler:
+For every retained bin, the receiver calculates:
 
 ```text
-Doppler resolution = sample_rate / (M * N)
-Doppler shift = Doppler bin * Doppler resolution
+delay bin   = received delay position - pilot delay position
+Doppler bin = received Doppler position - pilot Doppler position
 ```
 
-Fractional delay and fractional Doppler require a more advanced estimator.
+The differences wrap around the grid boundaries. The received pilot is divided
+by the known pilot value and the known OTFS phase term to estimate the complex
+path coefficient. That coefficient contains both attenuation and phase.
 
-## Step 8: Equalization removes the estimated channel
+The detected coefficients are stored in a sparse `M x N` delay-Doppler channel
+response. Undetected positions remain zero. For example, three paths produce
+three nonzero entries containing their estimated complex coefficients at their
+estimated delay and Doppler positions.
 
-After channel estimation, the receiver uses:
+The guard region is used to observe and detect the pilot copies. It is not the
+final channel matrix.
+
+## Step 8: The sparse response becomes the channel matrix
+
+Equalization uses the vector model:
 
 ```text
 y = Hx + n
 ```
 
-- `x` is the transmitted delay-Doppler symbol vector.
-- `H` is the estimated channel matrix.
-- `y` is the received vector.
-- `n` is noise.
+The transmitter and receiver DD grids are flattened row by row:
 
-The project provides two equalizers:
+```text
+x = [X_DD[0,0], X_DD[0,1], ..., X_DD[M-1,N-1]]^T
+y = [Y_DD[0,0], Y_DD[0,1], ..., Y_DD[M-1,N-1]]^T
+```
 
-- **Zero Forcing (ZF):** finds the least-squares solution. It can amplify noise
-  when the channel matrix is poorly conditioned.
-- **MMSE:** includes the estimated noise variance and is generally more stable
-  for noisy multipath channels.
+Both vectors contain `MN` elements, so `H` has shape `MN x MN`. Each column of
+`H` describes the received DD grid that would result from transmitting one
+symbol at the corresponding position of `x`.
 
-The equalized symbols should cluster around the four QPSK constellation points.
-The QPSK demodulator then converts their signs back into bits.
+POWDER-OTFS constructs `H` using the reduced-cyclic-prefix OTFS structure:
 
-## Step 9: BER measures the recovered data
+1. For each detected delay tap, its `N` Doppler coefficients form the first
+   column of an `N x N` circulant block.
+2. Circularly shifting that first column creates the remaining columns of the
+   block. This describes how that delay tap shifts symbols along the Doppler
+   axis.
+3. The block is placed between the appropriate input-delay and output-delay
+   groups in `H`.
+4. Known phase rotations are applied as the response moves across delay bins.
+5. When a delay wraps around the end of the grid, the rectangular-pulse phase
+   correction is applied.
+
+Repeating this for every output delay and every detected path fills the complete
+`MN x MN` matrix. The implementation follows the RCP-OTFS input-output
+structure and validates the circulant construction against a basis-response
+construction.
+
+## Step 9: ZF or MMSE equalizes the channel
+
+The received DD grid is flattened into `y`, and the equalizer estimates `x`.
+
+Zero Forcing solves the least-squares problem:
+
+```text
+x_hat = arg min ||Hx - y||^2
+```
+
+ZF tries to invert the estimated channel directly. It can strongly amplify
+noise when `H` is poorly conditioned.
+
+MMSE solves:
+
+```text
+x_hat = (H^H H + (noise variance / symbol energy) I)^-1 H^H y
+```
+
+The extra noise-dependent term prevents unstable inversion and normally makes
+MMSE more robust than ZF. The resulting vector is reshaped back into an `M x N`
+DD grid. Only data positions are demodulated; the pilot and guard positions are
+excluded.
+
+## Integer and fractional delay-Doppler
+
+The Doppler-bin spacing is:
+
+```text
+Doppler resolution = sample_rate / (M * N)
+```
+
+For the default `M=32`, `N=16`, and `sample_rate=1 MHz`, it is `1953.125 Hz`.
+
+An integer Doppler path is an exact multiple of this resolution. An integer
+delay is an exact sample delay. Such a path ideally produces one shifted pilot
+copy at one DD bin.
+
+A fractional path lies between grid positions. Its energy spreads across
+neighboring delay or Doppler bins. The current estimator can interpret this
+spread as several integer paths, producing an inaccurate `H`. Enlarging the
+guard protects the pilot observation, but it does not remove fractional
+spreading. Fractional delay-Doppler estimation is not yet implemented.
+
+## Step 10: BER measures the recovered data
 
 The bit error rate is:
 
