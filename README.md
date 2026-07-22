@@ -14,6 +14,7 @@ validated signal-processing modules for over-the-air experiments on the
 - Multipath delay-Doppler channel with AWGN
 - Fixed, Rayleigh, and Rician fading
 - Perfect-CSI and embedded-pilot channel estimation
+- Book-based phase-aware circulant delay-Doppler channel matrix
 - Zero-Forcing and MMSE equalization
 - Multi-frame BER calculation
 - Delay-Doppler and constellation debugging plots
@@ -21,22 +22,10 @@ validated signal-processing modules for over-the-air experiments on the
 
 ## System model
 
-```mermaid
-flowchart LR
-    A["Random bits"] --> B["QPSK modulator"]
-    B --> C["Delay-Doppler grid"]
-    P["Pilot and guards"] --> C
-    C --> D["ISFFT"]
-    D --> E["Heisenberg transform"]
-    E --> F["Multipath delay-Doppler channel<br/>Fading + AWGN"]
-    F --> G["Wigner transform"]
-    G --> H["SFFT"]
-    H --> I["Pilot-based channel estimator"]
-    I --> J["ZF or MMSE equalizer"]
-    H --> J
-    J --> K["QPSK demodulator"]
-    K --> L["BER"]
-```
+The fixed three-row diagram below separates the transmitter, wireless channel,
+and receiver so it remains readable at normal page width.
+
+![Complete OTFS transmitter, channel, and receiver](docs/images/otfs-system-model.svg)
 
 ## Quick start
 
@@ -48,13 +37,13 @@ source .venv/bin/activate
 python -m pip install -e .
 python -m pip install pytest
 python -m pytest
-python examples/end_to_end.py
+python examples/simulation/end_to_end.py
 ```
 
 Select between one and ten predefined channel paths:
 
 ```bash
-python examples/end_to_end.py --num-paths 5
+python examples/simulation/end_to_end.py --num-paths 5
 ```
 
 ## Documentation

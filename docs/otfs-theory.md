@@ -80,8 +80,8 @@ a time-frequency grid.
 
 In this project, the ISFFT applies:
 
-1. an inverse FFT along the delay axis;
-2. an FFT along the Doppler axis.
+1. an FFT along the delay axis;
+2. an inverse FFT along the Doppler axis.
 
 The result has the same `M x N` shape, but its meaning has changed:
 
