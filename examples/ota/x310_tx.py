@@ -7,15 +7,15 @@ from powder_otfs.ota.framing import (
     normalize_waveform,
 )
 from powder_otfs.ota.payload import create_otfs_payload
-from powder_otfs.ota.x310 import (
-    configure_x310_tx,
+from powder_otfs.ota.runtime import load_radio_runtime_config
+from powder_otfs.ota.usrp import (
+    configure_usrp_tx,
     transmit_waveform,
 )
 
 
 def main() -> None:
-    device_address = "192.168.40.2"
-    center_frequency = 3.5e9
+    runtime = load_radio_runtime_config()
     tx_gain = 0.0
     channel = 0
     antenna = "TX/RX"
@@ -49,10 +49,14 @@ def main() -> None:
     ).astype(np.complex64)
 
     print(
-        "\n========== X310 OTFS Transmitter =========="
+        "\n========== USRP OTFS Transmitter =========="
     )
-    print(f"Device Address     : {device_address}")
-    print(f"Center Frequency   : {center_frequency / 1e9:.3f} GHz")
+    print(f"Radio Type         : {runtime.radio_type.upper()}")
+    print(f"Device Arguments   : {runtime.device_args}")
+    print(
+        f"Center Frequency   : "
+        f"{runtime.center_frequency / 1e9:.3f} GHz"
+    )
     print(f"Sample Rate        : {config.sample_rate:.0f} samples/s")
     print(f"TX Gain            : {tx_gain:.1f} dB")
     print(f"Modulation         : {config.qam_order}-QAM")
@@ -81,10 +85,10 @@ def main() -> None:
         "===========================================\n"
     )
 
-    usrp = configure_x310_tx(
-        device_address=device_address,
+    usrp = configure_usrp_tx(
+        device_args=runtime.device_args,
         sample_rate=config.sample_rate,
-        center_frequency=center_frequency,
+        center_frequency=runtime.center_frequency,
         gain=tx_gain,
         channel=channel,
         antenna=antenna,

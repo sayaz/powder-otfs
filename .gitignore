@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 *.egg-info/
 rx_samples.npy
+.powder-radio.json

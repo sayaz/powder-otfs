@@ -22,8 +22,9 @@ from powder_otfs.ota.payload import create_otfs_payload
 from powder_otfs.ota.synchronization import (
     find_payload_starts,
 )
-from powder_otfs.ota.x310 import (
-    configure_x310_rx,
+from powder_otfs.ota.runtime import load_radio_runtime_config
+from powder_otfs.ota.usrp import (
+    configure_usrp_rx,
     receive_samples,
 )
 from powder_otfs.otfs.transforms import (
@@ -33,8 +34,7 @@ from powder_otfs.otfs.transforms import (
 
 
 def main() -> None:
-    device_address = "192.168.40.2"
-    center_frequency = 3.5e9
+    runtime = load_radio_runtime_config()
     rx_gain = 20.0
     channel = 0
     antenna = "RX2"
@@ -62,10 +62,14 @@ def main() -> None:
     )
 
     print(
-        "\n========== X310 OTFS Receiver Configuration =========="
+        "\n========== USRP OTFS Receiver Configuration =========="
     )
-    print(f"Device Address       : {device_address}")
-    print(f"Center Frequency     : {center_frequency / 1e9:.3f} GHz")
+    print(f"Radio Type           : {runtime.radio_type.upper()}")
+    print(f"Device Arguments     : {runtime.device_args}")
+    print(
+        f"Center Frequency     : "
+        f"{runtime.center_frequency / 1e9:.3f} GHz"
+    )
     print(f"Sample Rate          : {config.sample_rate:.0f} samples/s")
     print(f"RX Gain              : {rx_gain:.1f} dB")
     print(f"Channel              : {channel}")
@@ -123,10 +127,10 @@ def main() -> None:
     )
     print("Waiting for samples...")
 
-    usrp = configure_x310_rx(
-        device_address=device_address,
+    usrp = configure_usrp_rx(
+        device_args=runtime.device_args,
         sample_rate=config.sample_rate,
-        center_frequency=center_frequency,
+        center_frequency=runtime.center_frequency,
         gain=rx_gain,
         channel=channel,
         antenna=antenna,

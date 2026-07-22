@@ -4,6 +4,23 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
+radio_type="${1:-x310}"
+radio_role="${2:-unknown}"
+center_frequency="${3:-3500000000}"
+
+case "${radio_type}" in
+    x310)
+        device_args="addr=192.168.40.2"
+        ;;
+    b210)
+        device_args="type=b200"
+        ;;
+    *)
+        echo "Unsupported radio type: ${radio_type}" >&2
+        exit 1
+        ;;
+esac
+
 apt-get update
 apt-get install -y \
     git \
@@ -53,6 +70,19 @@ rm -rf "${project_dir}/.venv"
 chown -R \
     "${project_user}:${project_group}" \
     "${project_dir}"
+
+printf '%s\n' \
+    '{' \
+    "  \"role\": \"${radio_role}\"," \
+    "  \"radio_type\": \"${radio_type}\"," \
+    "  \"device_args\": \"${device_args}\"," \
+    "  \"center_frequency\": ${center_frequency}" \
+    '}' \
+    > "${project_dir}/.powder-radio.json"
+
+chown \
+    "${project_user}:${project_group}" \
+    "${project_dir}/.powder-radio.json"
 
 bashrc="${project_home}/.bashrc"
 old_activation_marker="# POWDER-OTFS automatic environment"

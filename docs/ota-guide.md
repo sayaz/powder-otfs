@@ -1,4 +1,4 @@
-# POWDER X310 Offline OTA Guide
+# POWDER Offline OTA Guide
 
 ## Run the experiment
 
@@ -12,13 +12,13 @@ cd ~/powder-otfs
 Start the receiver on the `rx` node:
 
 ```bash
-python3 examples/ota/x310_rx.py
+python3 examples/ota/ota_rx.py
 ```
 
 Then start the transmitter on the `tx` node:
 
 ```bash
-python3 examples/ota/x310_tx.py
+python3 examples/ota/ota_tx.py
 ```
 
 The receiver detects frames, estimates and corrects CFO, converts each payload
@@ -33,8 +33,11 @@ The received complex-IQ samples are saved at:
 
 ## Configure
 
-Radio settings such as center frequency, gain, antenna, and capture length are
-near the beginning of:
+The POWDER profile automatically supplies the selected radio type, UHD device
+arguments, and the 3.560 GHz center frequency.
+
+Radio settings such as gain, antenna, and capture length are near the beginning
+of:
 
 ```text
 examples/ota/x310_tx.py

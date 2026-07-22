@@ -31,9 +31,22 @@ The project is available on both nodes at:
 cd ~/powder-otfs
 ```
 
-Start the receiver on `rx`, then start the transmitter on `tx`. The exact
-command depends on whether the selected radio is an X310 or B210. See
-`docs/ota-guide.md` for the current commands and configuration.
+Start the receiver on `rx`:
+
+```bash
+cd ~/powder-otfs
+python3 examples/ota/ota_rx.py
+```
+
+Then start the transmitter on `tx`:
+
+```bash
+cd ~/powder-otfs
+python3 examples/ota/ota_tx.py
+```
+
+Each command automatically loads the radio type, device arguments, and center
+frequency selected by this profile.
 """
 
 COMPONENT_MANAGER_ID = (
@@ -43,10 +56,11 @@ UBUNTU_IMAGE = (
     "urn:publicid:IDN+emulab.net+image+"
     "emulab-ops//UBUNTU22-64-STD"
 )
-SETUP_COMMAND = (
+SETUP_SCRIPT = (
     "sudo bash /local/repository/"
     "scripts/powder/setup-rf-bench.sh"
 )
+CENTER_FREQUENCY_HZ = 3560000000
 
 INDOOR_RADIOS = [
     ("ota-x310-1", "X310 #1"),
@@ -102,6 +116,17 @@ context.verifyParameters()
 request = context.makeRequestRSpec()
 
 
+def setup_command(role, radio_type):
+    """Build the startup command for one selected radio."""
+
+    return "{} {} {} {}".format(
+        SETUP_SCRIPT,
+        radio_type,
+        role,
+        CENTER_FREQUENCY_HZ,
+    )
+
+
 def add_x310(role, radio_component_id):
     """Add an X310 and its server-class compute node."""
 
@@ -123,7 +148,7 @@ def add_x310(role, radio_component_id):
     compute.addService(
         rspec.Execute(
             shell="bash",
-            command=SETUP_COMMAND,
+            command=setup_command(role, "x310"),
         )
     )
 
@@ -149,7 +174,7 @@ def add_b210(role, nuc_component_id):
     nuc.addService(
         rspec.Execute(
             shell="bash",
-            command=SETUP_COMMAND,
+            command=setup_command(role, "b210"),
         )
     )
 
