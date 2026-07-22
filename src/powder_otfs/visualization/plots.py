@@ -65,6 +65,96 @@ def plot_waveform(
     plt.show()
 
 
+def plot_channel_matrix_validation(
+    circulant_matrix: np.ndarray,
+    basis_matrix: np.ndarray,
+) -> None:
+    """Compare phase-aware circulant and basis-generated channel matrices."""
+
+    if circulant_matrix.shape != basis_matrix.shape:
+        raise ValueError("Channel matrices must have the same shape.")
+
+    reference = max(
+        float(np.max(np.abs(basis_matrix))),
+        1e-15,
+    )
+    floor_db = -300.0
+
+    circulant_db = 20.0 * np.log10(
+        np.maximum(np.abs(circulant_matrix) / reference, 1e-15)
+    )
+    basis_db = 20.0 * np.log10(
+        np.maximum(np.abs(basis_matrix) / reference, 1e-15)
+    )
+    difference = np.abs(circulant_matrix - basis_matrix)
+    difference_db = 20.0 * np.log10(
+        np.maximum(difference / reference, 1e-15)
+    )
+
+    fig, axes = plt.subplots(
+        1,
+        3,
+        figsize=(17, 5),
+        constrained_layout=True,
+    )
+
+    images = (
+        axes[0].imshow(
+            circulant_db,
+            origin="lower",
+            aspect="auto",
+            cmap="viridis",
+            vmin=-60.0,
+            vmax=0.0,
+        ),
+        axes[1].imshow(
+            basis_db,
+            origin="lower",
+            aspect="auto",
+            cmap="viridis",
+            vmin=-60.0,
+            vmax=0.0,
+        ),
+        axes[2].imshow(
+            difference_db,
+            origin="lower",
+            aspect="auto",
+            cmap="inferno",
+            vmin=floor_db,
+            vmax=0.0,
+        ),
+    )
+
+    titles = (
+        "Phase-Aware Circulant H",
+        "Basis-Generated H",
+        "Relative Difference",
+    )
+
+    for axis, image, title in zip(
+        axes,
+        images,
+        titles,
+        strict=True,
+    ):
+        fig.colorbar(
+            image,
+            ax=axis,
+            label="Relative magnitude (dB)",
+        )
+        axis.set_title(title)
+        axis.set_xlabel("Input DD Symbol Index")
+        axis.set_ylabel("Output DD Symbol Index")
+
+    maximum_difference = float(np.max(difference))
+    fig.suptitle(
+        "Channel Matrix Validation — "
+        f"Maximum Absolute Difference: {maximum_difference:.3e}",
+        fontsize=14,
+    )
+    plt.show()
+
+
 def plot_otfs_debug_view(
     tx_dd_grid: np.ndarray,
     rx_dd_grid: np.ndarray,

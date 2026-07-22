@@ -11,7 +11,10 @@ from powder_otfs.estimation.pilot import pilot_channel_estimate
 from powder_otfs.modulation.qam import qam_demodulate, qam_modulate
 from powder_otfs.otfs.grid import insert_pilot_and_guards
 from powder_otfs.otfs.transforms import heisenberg, isfft, sfft, wigner
-from powder_otfs.visualization.plots import plot_otfs_debug_view
+from powder_otfs.visualization.plots import (
+    plot_channel_matrix_validation,
+    plot_otfs_debug_view,
+)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -38,9 +41,10 @@ def main() -> None:
     qam_order = 4
 
     sample_rate = 1e6
-    snr_db = 30.0
+    snr_db = 20.0
     num_frames = 100
     show_plots = True
+    show_channel_matrix_validation = True
     fading_model = "rayleigh"
     rician_k = 5.0
     random_seed = 12345
@@ -61,6 +65,7 @@ def main() -> None:
     )
 
     equalizer_name = "mmse"
+    channel_matrix_method = "circulant"
     rng = np.random.default_rng(random_seed)
 
     # delay samples, Doppler bins, complex gain
@@ -153,6 +158,7 @@ def main() -> None:
     print(f"Sample Rate       : {sample_rate:.0f} Hz")
     print(f"SNR               : {snr_db:.1f} dB")
     print(f"Fading Model      : {fading_model}")
+    print(f"Channel Matrix    : {channel_matrix_method}")
     if fading_model.lower() == "rician":
         print(f"Rician K-factor   : {rician_k}")
     print(f"Channel Paths     : {len(paths)}")
@@ -173,9 +179,11 @@ def main() -> None:
     print("=================================================\n")
 
     observation_delay_start = (
-        pilot_delay - maximum_supported_delay
+        pilot_delay
     )
-    observation_delay_stop = pilot_delay + 1
+    observation_delay_stop = (
+        pilot_delay + maximum_supported_delay + 1
+    )
 
     observation_doppler_start = (
         pilot_doppler - maximum_supported_doppler
@@ -190,6 +198,7 @@ def main() -> None:
     total_bit_errors = 0
     total_bits = 0
     debug_plot_data = None
+    matrix_validation_data = None
 
     for frame_index in range(num_frames):
         bits = rng.integers(
@@ -268,7 +277,26 @@ def main() -> None:
                 sample_rate=sample_rate,
                 noise_variance=channel.noise_variance,
                 threshold=estimation_threshold,
+                matrix_method=channel_matrix_method,
             )
+
+            if (
+                show_channel_matrix_validation
+                and frame_index == 0
+            ):
+                basis_estimate = pilot_channel_estimate(
+                    received_pilot_grid=pilot_observation,
+                    pilot_position=pilot_position,
+                    pilot_value=pilot_value,
+                    sample_rate=sample_rate,
+                    noise_variance=channel.noise_variance,
+                    threshold=estimation_threshold,
+                    matrix_method="basis",
+                )
+                matrix_validation_data = (
+                    estimate.channel_response.copy(),
+                    basis_estimate.channel_response.copy(),
+                )
 
         if equalizer_name.lower() == "zf":
             equalized = zero_forcing_equalizer(
@@ -320,6 +348,7 @@ def main() -> None:
     print("Simulation Complete")
     print(f"Channel Estimator : {estimate.method}")
     print(f"Equalizer         : {equalized.method}")
+    print(f"Channel Matrix    : {channel_matrix_method}")
     print(f"Threshold         : {estimation_threshold:.6f}")
     print(f"Bit Errors        : {total_bit_errors}")
     print(f"Processed Bits    : {total_bits}")
@@ -333,6 +362,15 @@ def main() -> None:
             pilot_observation=debug_plot_data[3],
             data_mask=data_mask,
             pilot_position=pilot_position,
+        )
+
+    if (
+        show_channel_matrix_validation
+        and matrix_validation_data is not None
+    ):
+        plot_channel_matrix_validation(
+            circulant_matrix=matrix_validation_data[0],
+            basis_matrix=matrix_validation_data[1],
         )
 
 
