@@ -22,9 +22,6 @@ validated signal-processing modules for over-the-air experiments on the
 
 ## System model
 
-The fixed three-row diagram below separates the transmitter, wireless channel,
-and receiver so it remains readable at normal page width.
-
 ![Complete OTFS transmitter, channel, and receiver](docs/images/otfs-system-model.svg)
 
 ## Quick start
@@ -32,18 +29,17 @@ and receiver so it remains readable at normal page width.
 From the project root:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-python -m pip install pytest
-python -m pytest
-python examples/simulation/end_to_end.py
+python3 -m pip install .
+python3 examples/simulation/end_to_end.py
 ```
+
+The POWDER profile performs the required installation automatically, so users
+can run the OTA examples directly after startup.
 
 Select between one and ten predefined channel paths:
 
 ```bash
-python examples/simulation/end_to_end.py --num-paths 5
+python3 examples/simulation/end_to_end.py --num-paths 5
 ```
 
 ## Documentation
