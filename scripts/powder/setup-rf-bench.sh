@@ -24,12 +24,12 @@ sdr_interface="$(
         awk '$4 ~ /^192[.]168[.]40[.]1[/]/ {print $2; exit}'
 )"
 
-if [[ -z "${sdr_interface}" ]]; then
-    echo "Could not find the 192.168.40.1 SDR interface." >&2
-    exit 1
+if [[ -n "${sdr_interface}" ]]; then
+    ip link set dev "${sdr_interface}" mtu 9000
+    echo "Configured X310 network interface ${sdr_interface}."
+else
+    echo "No X310 network interface found; using USB-attached SDR."
 fi
-
-ip link set dev "${sdr_interface}" mtu 9000
 
 project_user="$(
     stat -c '%U' /local/repository
