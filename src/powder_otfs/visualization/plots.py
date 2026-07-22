@@ -152,6 +152,27 @@ def plot_otfs_debug_view(
         ["Guard", "Data", "Pilot"]
     )
 
+    num_delay_bins, num_doppler_bins = expected_shape
+    axes[0, 0].set_xticks(
+        np.arange(-0.5, num_doppler_bins, 1),
+        minor=True,
+    )
+    axes[0, 0].set_yticks(
+        np.arange(-0.5, num_delay_bins, 1),
+        minor=True,
+    )
+    axes[0, 0].grid(
+        which="minor",
+        color="white",
+        linewidth=0.35,
+        alpha=0.55,
+    )
+    axes[0, 0].tick_params(
+        which="minor",
+        bottom=False,
+        left=False,
+    )
+
     rx_dd = axes[0, 1].imshow(
         np.abs(rx_dd_grid),
         origin="lower",
