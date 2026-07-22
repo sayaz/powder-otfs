@@ -2,6 +2,7 @@
 """POWDER profile for a selectable two-node indoor OTFS experiment."""
 
 import geni.portal as portal
+import geni.rspec.emulab.spectrum as spectrum
 import geni.rspec.igext as ig
 import geni.rspec.pg as rspec
 
