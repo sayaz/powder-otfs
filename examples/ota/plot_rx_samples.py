@@ -6,7 +6,10 @@ from powder_otfs.equalization.mmse import mmse_equalizer
 from powder_otfs.equalization.zf import zero_forcing_equalizer
 from powder_otfs.estimation.pilot import pilot_channel_estimate
 from powder_otfs.modulation.qam import qam_demodulate
-from powder_otfs.ota.config import OTFSOTAConfig
+from powder_otfs.ota.config import (
+    add_ota_config_arguments,
+    ota_config_from_arguments,
+)
 from powder_otfs.ota.frequency_offset import (
     correct_cfo,
     estimate_cfo,
@@ -41,12 +44,13 @@ def parse_arguments() -> argparse.Namespace:
         default=0,
         help="Detected frame index to display.",
     )
+    add_ota_config_arguments(parser)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_arguments()
-    config = OTFSOTAConfig()
+    config = ota_config_from_arguments(args)
     transmitted = create_otfs_payload(
         config
     )

@@ -28,6 +28,52 @@ def parse_arguments() -> argparse.Namespace:
         default=1,
         help="Number of predefined channel paths to use (1-10).",
     )
+    parser.add_argument(
+        "--bandwidth-mhz",
+        type=float,
+        choices=(1.0, 5.0, 10.0, 20.0),
+        default=1.0,
+        help=(
+            "Baseband bandwidth in MHz. The simulation sample rate is "
+            "set equal to this bandwidth (default: 1)."
+        ),
+    )
+    parser.add_argument(
+        "--delay-bins",
+        type=int,
+        default=32,
+        help="Number of delay bins in the DD grid (default: 32).",
+    )
+    parser.add_argument(
+        "--doppler-bins",
+        type=int,
+        default=16,
+        help="Number of Doppler bins in the DD grid (default: 16).",
+    )
+    parser.add_argument(
+        "--max-delay-samples",
+        type=int,
+        default=3,
+        help="Maximum supported channel delay in samples (default: 3).",
+    )
+    parser.add_argument(
+        "--max-doppler-bins",
+        type=int,
+        default=2,
+        help="Maximum supported Doppler shift in bins (default: 2).",
+    )
+    parser.add_argument(
+        "--num-frames",
+        type=int,
+        default=100,
+        help="Number of OTFS frames to simulate (default: 100).",
+    )
+    parser.add_argument(
+        "--snr-db",
+        type=float,
+        default=20.0,
+        help="Channel SNR in dB (default: 20).",
+    )
 
     return parser.parse_args()
 
@@ -36,13 +82,14 @@ def main() -> None:
     args = parse_arguments()
 
     # Simulation settings
-    num_delay_bins = 32
-    num_doppler_bins = 16
+    num_delay_bins = args.delay_bins
+    num_doppler_bins = args.doppler_bins
     qam_order = 4
 
-    sample_rate = 1e6
-    snr_db = 20.0
-    num_frames = 100
+    bandwidth_hz = args.bandwidth_mhz * 1e6
+    sample_rate = bandwidth_hz
+    snr_db = args.snr_db
+    num_frames = args.num_frames
     show_plots = True
     show_channel_matrix_validation = True
     fading_model = "rayleigh"
@@ -51,8 +98,17 @@ def main() -> None:
 
     pilot_value = 4.0 + 0.0j
     threshold_factor = 5.0
-    maximum_supported_delay = 3
-    maximum_supported_doppler = 2
+    maximum_supported_delay = args.max_delay_samples
+    maximum_supported_doppler = args.max_doppler_bins
+
+    if num_delay_bins <= 0 or num_doppler_bins <= 0:
+        raise ValueError("DD-grid dimensions must be positive.")
+    if maximum_supported_delay < 0:
+        raise ValueError("max_delay_samples must not be negative.")
+    if maximum_supported_doppler < 0:
+        raise ValueError("max_doppler_bins must not be negative.")
+    if num_frames <= 0:
+        raise ValueError("num_frames must be positive.")
 
     pilot_position = (
         num_delay_bins // 2,
@@ -89,6 +145,21 @@ def main() -> None:
         )
 
     active_definitions = path_definitions[: args.num_paths]
+
+    if any(
+        delay_samples > maximum_supported_delay
+        for delay_samples, _, _ in active_definitions
+    ):
+        raise ValueError(
+            "An active channel path exceeds max_delay_samples."
+        )
+    if any(
+        abs(doppler_bin) > maximum_supported_doppler
+        for _, doppler_bin, _ in active_definitions
+    ):
+        raise ValueError(
+            "An active channel path exceeds max_doppler_bins."
+        )
 
     paths = [
         ChannelPath(
@@ -155,6 +226,7 @@ def main() -> None:
         f"{2 * guard_doppler + 1}"
     )
     print(f"Doppler Resolution: {doppler_resolution:.3f} Hz")
+    print(f"Bandwidth         : {bandwidth_hz / 1e6:.1f} MHz")
     print(f"Sample Rate       : {sample_rate:.0f} Hz")
     print(f"SNR               : {snr_db:.1f} dB")
     print(f"Fading Model      : {fading_model}")
@@ -171,6 +243,7 @@ def main() -> None:
         print(
             f"  Path {index}: "
             f"Delay={delay_samples} samples, "
+            f"Delay Time={delay_samples / sample_rate * 1e6:.3f} us, "
             f"Doppler Bin={doppler_bin}, "
             f"Doppler={doppler_bin * doppler_resolution:.3f} Hz, "
             f"Gain={gain}"

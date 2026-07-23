@@ -1,6 +1,11 @@
+import argparse
+
 import numpy as np
 
-from powder_otfs.ota.config import OTFSOTAConfig
+from powder_otfs.ota.config import (
+    add_ota_config_arguments,
+    ota_config_from_arguments,
+)
 from powder_otfs.ota.framing import (
     build_ota_frame,
     create_preamble,
@@ -14,15 +19,41 @@ from powder_otfs.ota.usrp import (
 )
 
 
+def parse_arguments() -> argparse.Namespace:
+    """Parse transmitter configuration options."""
+
+    parser = argparse.ArgumentParser(
+        description="Transmit an OTFS waveform using a POWDER USRP.",
+    )
+    add_ota_config_arguments(parser)
+    parser.add_argument(
+        "--tx-gain",
+        type=float,
+        default=0.0,
+        help="USRP transmit gain in dB (default: 0).",
+    )
+    parser.add_argument(
+        "--repeat-count",
+        type=int,
+        default=5000,
+        help="Number of repeated frames to transmit (default: 5000).",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_arguments()
     runtime = load_radio_runtime_config()
-    tx_gain = 0.0
+    tx_gain = args.tx_gain
     channel = 0
     antenna = "TX/RX"
     peak_amplitude = 0.5
-    repeat_count = 5000
+    repeat_count = args.repeat_count
 
-    config = OTFSOTAConfig()
+    if repeat_count <= 0:
+        raise ValueError("repeat_count must be positive.")
+
+    config = ota_config_from_arguments(args)
     payload = create_otfs_payload(
         config
     )
@@ -58,6 +89,7 @@ def main() -> None:
         f"{runtime.center_frequency / 1e9:.3f} GHz"
     )
     print(f"Sample Rate        : {config.sample_rate:.0f} samples/s")
+    print(f"Bandwidth          : {config.bandwidth_mhz:.1f} MHz")
     print(f"TX Gain            : {tx_gain:.1f} dB")
     print(f"Modulation         : {config.qam_order}-QAM")
     print(
@@ -76,7 +108,13 @@ def main() -> None:
     )
     print(
         f"Cyclic Prefix      : "
-        f"{config.cyclic_prefix_samples} samples"
+        f"{config.cyclic_prefix_samples} samples "
+        f"({config.cyclic_prefix_samples / config.sample_rate * 1e6:.3f} us)"
+    )
+    print(f"Preamble           : {len(preamble)} samples")
+    print(
+        f"Time Guard         : "
+        f"{config.time_guard_samples} samples per side"
     )
     print(f"Frame Length       : {len(tx_frame)} samples")
     print(f"Repeated Frames    : {repeat_count}")

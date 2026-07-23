@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -12,7 +13,10 @@ from powder_otfs.estimation.pilot import (
     pilot_channel_estimate,
 )
 from powder_otfs.modulation.qam import qam_demodulate
-from powder_otfs.ota.config import OTFSOTAConfig
+from powder_otfs.ota.config import (
+    add_ota_config_arguments,
+    ota_config_from_arguments,
+)
 from powder_otfs.ota.frequency_offset import (
     correct_cfo,
     estimate_cfo,
@@ -33,18 +37,49 @@ from powder_otfs.otfs.transforms import (
 )
 
 
+def parse_arguments() -> argparse.Namespace:
+    """Parse receiver configuration options."""
+
+    parser = argparse.ArgumentParser(
+        description="Receive and decode OTFS frames using a POWDER USRP.",
+    )
+    add_ota_config_arguments(parser)
+    parser.add_argument(
+        "--rx-gain",
+        type=float,
+        default=20.0,
+        help="USRP receive gain in dB (default: 20).",
+    )
+    parser.add_argument(
+        "--capture-duration",
+        type=float,
+        default=6.0,
+        help="Receive-capture duration in seconds (default: 6).",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_arguments()
     runtime = load_radio_runtime_config()
-    rx_gain = 20.0
+    rx_gain = args.rx_gain
     channel = 0
     antenna = "RX2"
-    capture_samples = 6_000_000
+    if args.capture_duration <= 0.0:
+        raise ValueError("capture_duration must be positive.")
+
+    config = ota_config_from_arguments(args)
+    capture_samples = int(
+        round(
+            args.capture_duration
+            * config.sample_rate
+        )
+    )
     save_received_samples = True
     received_samples_path = Path(
         "results/rx_samples.npy"
     )
 
-    config = OTFSOTAConfig()
     transmitted = create_otfs_payload(
         config
     )
@@ -71,6 +106,7 @@ def main() -> None:
         f"{runtime.center_frequency / 1e9:.3f} GHz"
     )
     print(f"Sample Rate          : {config.sample_rate:.0f} samples/s")
+    print(f"Bandwidth            : {config.bandwidth_mhz:.1f} MHz")
     print(f"RX Gain              : {rx_gain:.1f} dB")
     print(f"Channel              : {channel}")
     print(f"RX Antenna           : {antenna}")
@@ -107,7 +143,8 @@ def main() -> None:
     )
     print(
         f"Cyclic Prefix        : "
-        f"{config.cyclic_prefix_samples} samples"
+        f"{config.cyclic_prefix_samples} samples "
+        f"({config.cyclic_prefix_samples / config.sample_rate * 1e6:.3f} us)"
     )
     print(f"Preamble             : {len(preamble)} samples")
     print(
