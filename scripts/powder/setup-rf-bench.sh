@@ -22,6 +22,9 @@ case "${radio_type}" in
 esac
 
 apt-get update
+apt-get install -y software-properties-common
+add-apt-repository -y ppa:ettusresearch/uhd
+apt-get update
 apt-get install -y \
     git \
     gnuradio \
@@ -32,6 +35,8 @@ apt-get install -y \
     python3-uhd \
     rsync \
     uhd-host
+
+uhd_images_downloader
 
 sysctl -w net.core.wmem_max=24862979
 sysctl -w net.core.rmem_max=24862979
