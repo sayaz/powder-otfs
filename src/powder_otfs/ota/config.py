@@ -146,9 +146,10 @@ class OTFSOTAConfig:
         pilot_delay, pilot_doppler = self.pilot_position
         return (
             slice(
+                pilot_delay,
                 pilot_delay
-                - self.maximum_supported_delay,
-                pilot_delay + 1,
+                + self.maximum_supported_delay
+                + 1,
             ),
             slice(
                 pilot_doppler
