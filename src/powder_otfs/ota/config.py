@@ -11,15 +11,15 @@ class OTFSOTAConfig:
     num_delay_bins: int = 32
     num_doppler_bins: int = 16
     qam_order: int = 4
-    bandwidth_mhz: float = 1.0
+    bandwidth_mhz: float = 20.0
     pilot_value: complex = 4.0 + 0.0j
     maximum_supported_delay: int = 4
     maximum_supported_doppler: int = 2
     threshold_factor: float = 5.0
     equalizer_name: str = "mmse"
-    preamble_duration_seconds: float = 128e-6
     time_guard_duration_seconds: float = 128e-6
-    synchronization_threshold: float = 0.50
+    stf_detection_threshold: float = 0.75
+    ltf_detection_threshold: float = 0.50
     random_seed: int = 12345
 
     def __post_init__(self) -> None:
@@ -33,21 +33,6 @@ class OTFSOTAConfig:
         """Return the sample rate used for the selected bandwidth."""
 
         return self.bandwidth_mhz * 1e6
-
-    @property
-    def preamble_half_length(self) -> int:
-        """Return half of the repeated preamble in samples."""
-
-        return max(
-            1,
-            int(
-                round(
-                    self.preamble_duration_seconds
-                    * self.sample_rate
-                    / 2.0
-                )
-            ),
-        )
 
     @property
     def time_guard_samples(self) -> int:
@@ -191,8 +176,8 @@ def add_ota_config_arguments(
         "--bandwidth-mhz",
         type=float,
         choices=(1.0, 5.0, 10.0, 20.0),
-        default=1.0,
-        help="Baseband bandwidth and sample rate in MHz (default: 1).",
+        default=20.0,
+        help="Baseband bandwidth and sample rate in MHz (default: 20).",
     )
     parser.add_argument(
         "--delay-bins",

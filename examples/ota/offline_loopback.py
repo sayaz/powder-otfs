@@ -10,11 +10,13 @@ from powder_otfs.ota.config import (
 )
 from powder_otfs.ota.framing import (
     build_ota_frame,
-    create_preamble,
+    create_training_preamble,
     normalize_waveform,
 )
 from powder_otfs.ota.payload import create_otfs_payload
-from powder_otfs.ota.synchronization import find_payload_start
+from powder_otfs.ota.synchronization import (
+    find_training_preamble_starts,
+)
 from powder_otfs.otfs.transforms import sfft, wigner
 
 
@@ -33,10 +35,8 @@ def main() -> None:
     config = ota_config_from_arguments(args)
     transmitted = create_otfs_payload(config)
 
-    preamble = create_preamble(
-        half_length=config.preamble_half_length,
-        seed=config.random_seed,
-    )
+    training = create_training_preamble()
+    preamble = training.samples
     tx_frame = build_ota_frame(
         payload=transmitted.waveform,
         preamble=preamble,
@@ -57,12 +57,19 @@ def main() -> None:
         )
     )
 
-    preamble_end = find_payload_start(
+    frame_length = len(tx_frame)
+    preamble_starts = find_training_preamble_starts(
         received=rx_capture,
-        preamble=preamble,
+        preamble=training,
+        stf_threshold=config.stf_detection_threshold,
+        ltf_threshold=config.ltf_detection_threshold,
+        minimum_separation=frame_length // 2,
     )
+    if len(preamble_starts) != 1:
+        raise RuntimeError("Expected exactly one loopback frame.")
     payload_start = (
-        preamble_end
+        int(preamble_starts[0])
+        + len(preamble)
         + config.cyclic_prefix_samples
     )
     rx_payload = rx_capture[
@@ -94,7 +101,8 @@ def main() -> None:
         f"{config.num_delay_bins} x {config.num_doppler_bins}"
     )
     print(f"OTFS Payload       : {len(transmitted.waveform)} samples")
-    print(f"Preamble           : {len(preamble)} samples")
+    print(f"STF                : {len(training.stf)} samples")
+    print(f"LTF                : {len(training.ltf)} samples")
     print(f"Cyclic Prefix      : {config.cyclic_prefix_samples} samples")
     print(
         f"Time Guard         : "

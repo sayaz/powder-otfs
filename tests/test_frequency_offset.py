@@ -3,6 +3,7 @@ import numpy as np
 from powder_otfs.ota.frequency_offset import (
     correct_cfo,
     estimate_cfo,
+    estimate_repeated_symbol_cfo,
 )
 
 
@@ -54,3 +55,26 @@ def test_estimate_and_correct_cfo() -> None:
         preamble,
         atol=1e-12,
     )
+
+
+def test_estimate_cfo_from_ten_short_symbols() -> None:
+    sample_rate = 20_000_000.0
+    expected_cfo_hz = 18_000.0
+    rng = np.random.default_rng(3)
+    short_symbol = (
+        2 * rng.integers(0, 2, 16) - 1
+    ).astype(np.complex128)
+    stf = np.tile(short_symbol, 10)
+    indices = np.arange(len(stf))
+    received = stf * np.exp(
+        1j * 2.0 * np.pi * expected_cfo_hz
+        * indices / sample_rate
+    )
+
+    estimate = estimate_repeated_symbol_cfo(
+        repeated_symbols=received,
+        symbol_length=16,
+        sample_rate=sample_rate,
+    )
+
+    assert np.isclose(estimate, expected_cfo_hz, atol=1e-9)

@@ -18,7 +18,7 @@ Each B210 is USB-attached to its corresponding `ota-nuc` compute node. Each
 X310 is connected through a dedicated 10 Gb/s link to a server-class compute
 node.
 
-The experiment requests the reserved 3550-3570 MHz spectrum range and installs
+The experiment requests the reserved 3360-3380 MHz spectrum range and installs
 POWDER-OTFS and its dependencies automatically.
 """
 
@@ -60,7 +60,7 @@ SETUP_SCRIPT = (
     "sudo bash /local/repository/"
     "scripts/powder/setup-rf-bench.sh"
 )
-CENTER_FREQUENCY_HZ = 3560000000
+CENTER_FREQUENCY_HZ = 3370000000
 
 INDOOR_RADIOS = [
     ("ota-x310-1", "X310 #1"),
@@ -191,7 +191,7 @@ def add_radio(role, component_id):
 add_radio("tx", parameters.tx_radio)
 add_radio("rx", parameters.rx_radio)
 
-request.requestSpectrum(3550.0, 3570.0, 0)
+request.requestSpectrum(3360.0, 3380.0, 0)
 
 tour = ig.Tour()
 tour.Description(ig.Tour.MARKDOWN, DESCRIPTION)

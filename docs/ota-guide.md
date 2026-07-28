@@ -21,9 +21,11 @@ Then start the transmitter on the `tx` node:
 python3 examples/ota/ota_tx.py
 ```
 
-The receiver detects frames, estimates and corrects CFO, converts each payload
-to the DD domain, estimates the channel from the embedded pilot, applies ZF or
-MMSE equalization, and reports aggregate BER.
+The receiver uses the STF for coarse detection and CFO estimation, the LTF for
+fine frame alignment and CFO refinement, and the LTF correlation for
+fractional-sample timing correction. It then converts each payload to the DD
+domain, estimates the channel from the embedded pilot, applies ZF or MMSE
+equalization, and reports aggregate BER.
 
 The received complex-IQ samples are saved at:
 
@@ -34,10 +36,19 @@ The received complex-IQ samples are saved at:
 ## Configure
 
 The POWDER profile automatically supplies the selected radio type, UHD device
-arguments, and the 3.560 GHz center frequency.
+arguments, and the 3.370 GHz center frequency. The indoor profile requests the
+reserved 3360-3380 MHz range.
 
-Radio settings such as gain, antenna, and capture length are near the beginning
-of:
+The OTA commands accept bandwidth, gain, capture length, grid, and supported
+delay/Doppler options. The default bandwidth and sample rate are 20 MHz and
+20 MS/s. For example:
+
+```bash
+python3 examples/ota/ota_rx.py --bandwidth-mhz 20 --rx-gain 20
+python3 examples/ota/ota_tx.py --bandwidth-mhz 20 --tx-gain 10
+```
+
+The transmitter and receiver entry points are:
 
 ```text
 examples/ota/x310_tx.py

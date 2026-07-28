@@ -19,12 +19,14 @@ from powder_otfs.ota.config import (
 )
 from powder_otfs.ota.frequency_offset import (
     correct_cfo,
-    estimate_cfo,
+    estimate_repeated_symbol_cfo,
 )
-from powder_otfs.ota.framing import create_preamble
+from powder_otfs.ota.framing import create_training_preamble
 from powder_otfs.ota.payload import create_otfs_payload
 from powder_otfs.ota.synchronization import (
-    find_payload_starts,
+    correct_fractional_timing,
+    estimate_fractional_timing_offset,
+    find_training_preamble_starts,
 )
 from powder_otfs.ota.runtime import load_radio_runtime_config
 from powder_otfs.ota.usrp import (
@@ -83,10 +85,8 @@ def main() -> None:
     transmitted = create_otfs_payload(
         config
     )
-    preamble = create_preamble(
-        half_length=config.preamble_half_length,
-        seed=config.random_seed,
-    )
+    training = create_training_preamble()
+    preamble = training.samples
 
     frame_length = (
         config.time_guard_samples
@@ -146,16 +146,23 @@ def main() -> None:
         f"{config.cyclic_prefix_samples} samples "
         f"({config.cyclic_prefix_samples / config.sample_rate * 1e6:.3f} us)"
     )
-    print(f"Preamble             : {len(preamble)} samples")
+    print(f"STF                  : {len(training.stf)} samples")
+    print(f"LTF                  : {len(training.ltf)} samples")
+    print(f"Complete Preamble    : {len(preamble)} samples")
     print(
         f"Time Guard           : "
         f"{config.time_guard_samples} samples per side"
     )
     print(f"Complete Frame       : {frame_length} samples")
     print(
-        f"Sync Threshold       : "
-        f"{config.synchronization_threshold:.2f}"
+        f"STF Threshold        : "
+        f"{config.stf_detection_threshold:.2f}"
     )
+    print(
+        f"LTF Threshold        : "
+        f"{config.ltf_detection_threshold:.2f}"
+    )
+    print("Fractional Timing    : Enabled")
     print("CFO Correction       : Enabled")
     print(f"Channel Estimator    : Embedded Pilot")
     print(f"Equalizer            : {config.equalizer_name.upper()}")
@@ -195,25 +202,24 @@ def main() -> None:
 
     print("Capture complete. Detecting frames...")
 
-    preamble_ends = find_payload_starts(
+    preamble_starts = find_training_preamble_starts(
         received=received,
-        preamble=preamble,
-        threshold=config.synchronization_threshold,
+        preamble=training,
+        stf_threshold=config.stf_detection_threshold,
+        ltf_threshold=config.ltf_detection_threshold,
         minimum_separation=frame_length // 2,
     )
 
     received_dd_grids: list[np.ndarray] = []
     channel_gains: list[complex] = []
     cfo_estimates_hz: list[float] = []
+    fractional_timing_offsets: list[float] = []
     rejected_frames = 0
 
-    for preamble_end in preamble_ends:
-        preamble_start = (
-            preamble_end
-            - len(preamble)
-        )
+    for preamble_start in preamble_starts:
         payload_start = (
-            preamble_end
+            preamble_start
+            + len(preamble)
             + config.cyclic_prefix_samples
         )
         payload_end = (
@@ -231,29 +237,52 @@ def main() -> None:
         received_frame = received[
             preamble_start:payload_end
         ]
-        received_preamble = received_frame[
-            :len(preamble)
-        ]
+        coarse_cfo_hz = estimate_repeated_symbol_cfo(
+            repeated_symbols=received_frame[:len(training.stf)],
+            symbol_length=len(training.stf_short_symbol),
+            sample_rate=config.sample_rate,
+        )
+        coarse_corrected_frame = correct_cfo(
+            samples=received_frame,
+            cfo_hz=coarse_cfo_hz,
+            sample_rate=config.sample_rate,
+        )
 
-        cfo_hz = estimate_cfo(
-            repeated_preamble=received_preamble,
+        fractional_offset = estimate_fractional_timing_offset(
+            received=coarse_corrected_frame,
+            known_sequence=training.ltf_symbol,
+            integer_start=training.ltf_symbol_offset,
+        )
+        timing_corrected_frame = correct_fractional_timing(
+            samples=coarse_corrected_frame,
+            offset_samples=fractional_offset,
+        )
+
+        ltf_symbol_start = training.ltf_symbol_offset
+        repeated_ltf = timing_corrected_frame[
+            ltf_symbol_start:
+            ltf_symbol_start + 2 * len(training.ltf_symbol)
+        ]
+        fine_cfo_hz = estimate_repeated_symbol_cfo(
+            repeated_symbols=repeated_ltf,
+            symbol_length=len(training.ltf_symbol),
             sample_rate=config.sample_rate,
         )
         corrected_frame = correct_cfo(
-            samples=received_frame,
-            cfo_hz=cfo_hz,
+            samples=timing_corrected_frame,
+            cfo_hz=fine_cfo_hz,
             sample_rate=config.sample_rate,
         )
-        corrected_preamble = corrected_frame[
-            :len(preamble)
+        corrected_ltf = corrected_frame[
+            len(training.stf):len(preamble)
         ]
 
         channel_gain = np.vdot(
-            preamble,
-            corrected_preamble,
+            training.ltf,
+            corrected_ltf,
         ) / np.vdot(
-            preamble,
-            preamble,
+            training.ltf,
+            training.ltf,
         )
 
         if abs(channel_gain) < 1e-12:
@@ -282,7 +311,10 @@ def main() -> None:
             received_dd_grid
         )
         channel_gains.append(channel_gain)
-        cfo_estimates_hz.append(cfo_hz)
+        cfo_estimates_hz.append(
+            coarse_cfo_hz + fine_cfo_hz
+        )
+        fractional_timing_offsets.append(fractional_offset)
 
     if not received_dd_grids:
         raise RuntimeError(
@@ -420,7 +452,7 @@ def main() -> None:
     print(
         "\n========== X310 OTFS Multi-Frame Result =========="
     )
-    print(f"Detected Frames       : {len(preamble_ends)}")
+    print(f"Detected Frames       : {len(preamble_starts)}")
     print(f"Processed Frames      : {processed_frames}")
     print(f"Rejected Frames       : {rejected_frames}")
     print(f"Processed Bits        : {processed_bits}")
@@ -433,6 +465,14 @@ def main() -> None:
     print(f"Mean Channel Magnitude: {np.mean(gain_magnitudes):.6e}")
     print(f"Mean CFO Estimate     : {np.mean(cfo_estimates):.3f} Hz")
     print(f"CFO Standard Deviation: {np.std(cfo_estimates):.3f} Hz")
+    print(
+        f"Mean Fractional Offset: "
+        f"{np.mean(fractional_timing_offsets):.4f} samples"
+    )
+    print(
+        f"Fractional Offset Std : "
+        f"{np.std(fractional_timing_offsets):.4f} samples"
+    )
     print(f"Noise Variance        : {noise_variance:.6e}")
     print(f"Estimation Threshold  : {estimation_threshold:.6e}")
     print(f"Channel Estimator     : {estimate.method}")

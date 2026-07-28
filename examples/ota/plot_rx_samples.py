@@ -12,12 +12,14 @@ from powder_otfs.ota.config import (
 )
 from powder_otfs.ota.frequency_offset import (
     correct_cfo,
-    estimate_cfo,
+    estimate_repeated_symbol_cfo,
 )
-from powder_otfs.ota.framing import create_preamble
+from powder_otfs.ota.framing import create_training_preamble
 from powder_otfs.ota.payload import create_otfs_payload
 from powder_otfs.ota.synchronization import (
-    find_payload_starts,
+    correct_fractional_timing,
+    estimate_fractional_timing_offset,
+    find_training_preamble_starts,
 )
 from powder_otfs.otfs.transforms import (
     sfft,
@@ -55,10 +57,8 @@ def main() -> None:
         config
     )
     received = np.load(args.capture)
-    preamble = create_preamble(
-        half_length=config.preamble_half_length,
-        seed=config.random_seed,
-    )
+    training = create_training_preamble()
+    preamble = training.samples
     frame_length = (
         config.time_guard_samples
         + len(preamble)
@@ -67,28 +67,26 @@ def main() -> None:
         + config.time_guard_samples
     )
 
-    preamble_ends = find_payload_starts(
+    preamble_starts = find_training_preamble_starts(
         received=received,
-        preamble=preamble,
-        threshold=config.synchronization_threshold,
+        preamble=training,
+        stf_threshold=config.stf_detection_threshold,
+        ltf_threshold=config.ltf_detection_threshold,
         minimum_separation=frame_length // 2,
     )
 
-    if not 0 <= args.frame_index < len(preamble_ends):
+    if not 0 <= args.frame_index < len(preamble_starts):
         raise ValueError(
             f"frame-index must be between 0 and "
-            f"{len(preamble_ends) - 1}."
+            f"{len(preamble_starts) - 1}."
         )
 
-    preamble_end = int(
-        preamble_ends[args.frame_index]
-    )
-    preamble_start = (
-        preamble_end
-        - len(preamble)
+    preamble_start = int(
+        preamble_starts[args.frame_index]
     )
     payload_start = (
-        preamble_end
+        preamble_start
+        + len(preamble)
         + config.cyclic_prefix_samples
     )
     payload_end = (
@@ -99,28 +97,51 @@ def main() -> None:
     received_frame = received[
         preamble_start:payload_end
     ]
-    received_preamble = received_frame[
-        :len(preamble)
+    coarse_cfo_hz = estimate_repeated_symbol_cfo(
+        repeated_symbols=received_frame[:len(training.stf)],
+        symbol_length=len(training.stf_short_symbol),
+        sample_rate=config.sample_rate,
+    )
+    coarse_corrected_frame = correct_cfo(
+        samples=received_frame,
+        cfo_hz=coarse_cfo_hz,
+        sample_rate=config.sample_rate,
+    )
+    fractional_offset = estimate_fractional_timing_offset(
+        received=coarse_corrected_frame,
+        known_sequence=training.ltf_symbol,
+        integer_start=training.ltf_symbol_offset,
+    )
+    timing_corrected_frame = correct_fractional_timing(
+        samples=coarse_corrected_frame,
+        offset_samples=fractional_offset,
+    )
+    ltf_symbol_start = training.ltf_symbol_offset
+    repeated_ltf = timing_corrected_frame[
+        ltf_symbol_start:
+        ltf_symbol_start + 2 * len(training.ltf_symbol)
     ]
-    cfo_hz = estimate_cfo(
-        repeated_preamble=received_preamble,
+    fine_cfo_hz = estimate_repeated_symbol_cfo(
+        repeated_symbols=repeated_ltf,
+        symbol_length=len(training.ltf_symbol),
         sample_rate=config.sample_rate,
     )
     corrected_frame = correct_cfo(
-        samples=received_frame,
-        cfo_hz=cfo_hz,
+        samples=timing_corrected_frame,
+        cfo_hz=fine_cfo_hz,
         sample_rate=config.sample_rate,
     )
-    corrected_preamble = corrected_frame[
-        :len(preamble)
+    corrected_ltf = corrected_frame[
+        len(training.stf):len(preamble)
     ]
     channel_gain = np.vdot(
-        preamble,
-        corrected_preamble,
+        training.ltf,
+        corrected_ltf,
     ) / np.vdot(
-        preamble,
-        preamble,
+        training.ltf,
+        training.ltf,
     )
+    cfo_hz = coarse_cfo_hz + fine_cfo_hz
 
     payload_offset = (
         len(preamble)
@@ -224,9 +245,10 @@ def main() -> None:
         "\n========== Offline OTA Debug =========="
     )
     print(f"Capture Samples      : {len(received)}")
-    print(f"Detected Frames      : {len(preamble_ends)}")
+    print(f"Detected Frames      : {len(preamble_starts)}")
     print(f"Displayed Frame      : {args.frame_index}")
     print(f"CFO Estimate         : {cfo_hz:.3f} Hz")
+    print(f"Fractional Offset    : {fractional_offset:.4f} samples")
     print(f"Channel Gain         : {channel_gain}")
     print(f"Noise Variance       : {noise_variance:.6e}")
     print(f"Estimation Threshold : {threshold:.6e}")

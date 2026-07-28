@@ -8,7 +8,7 @@ from powder_otfs.ota.config import (
 )
 from powder_otfs.ota.framing import (
     build_ota_frame,
-    create_preamble,
+    create_training_preamble,
     normalize_waveform,
 )
 from powder_otfs.ota.payload import create_otfs_payload
@@ -57,10 +57,8 @@ def main() -> None:
     payload = create_otfs_payload(
         config
     )
-    preamble = create_preamble(
-        half_length=config.preamble_half_length,
-        seed=config.random_seed,
-    )
+    training = create_training_preamble()
+    preamble = training.samples
 
     tx_frame = build_ota_frame(
         payload=payload.waveform,
@@ -111,7 +109,9 @@ def main() -> None:
         f"{config.cyclic_prefix_samples} samples "
         f"({config.cyclic_prefix_samples / config.sample_rate * 1e6:.3f} us)"
     )
-    print(f"Preamble           : {len(preamble)} samples")
+    print(f"STF                : {len(training.stf)} samples")
+    print(f"LTF                : {len(training.ltf)} samples")
+    print(f"Complete Preamble  : {len(preamble)} samples")
     print(
         f"Time Guard         : "
         f"{config.time_guard_samples} samples per side"

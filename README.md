@@ -54,12 +54,13 @@ python3 examples/simulation/end_to_end.py --num-paths 5
 
 ## Current limitations
 
-The current implementation is SISO and supports QPSK, integer-sample delays,
-and grid-aligned Doppler estimation. The offline X310 link uses a time-domain
-preamble for frame synchronization and CFO correction, a cyclic prefix, an
-embedded DD pilot, pilot-based channel estimation, and ZF or MMSE equalization.
-It does not yet include fractional delay/Doppler estimation, FEC, or
-standardized channel profiles.
+The current implementation is SISO and supports QPSK, integer-sample channel
+delays, and grid-aligned Doppler estimation. The offline X310 link uses
+802.11-style STF/LTF fields for frame synchronization, coarse and fine CFO
+estimation, and fractional-sample timing correction. It then uses a cyclic
+prefix, embedded DD pilot, pilot-based channel estimation, and ZF or MMSE
+equalization. It does not yet include fractional delay/Doppler channel
+estimation, FEC, or standardized channel profiles.
 
 ## Roadmap
 

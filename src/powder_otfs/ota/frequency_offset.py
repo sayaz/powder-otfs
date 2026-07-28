@@ -36,6 +36,40 @@ def estimate_cfo(
     )
 
 
+def estimate_repeated_symbol_cfo(
+    repeated_symbols: np.ndarray,
+    symbol_length: int,
+    sample_rate: float,
+) -> float:
+    """Estimate CFO by averaging adjacent repeated-symbol correlations."""
+
+    if sample_rate <= 0.0:
+        raise ValueError("sample_rate must be positive.")
+    if symbol_length <= 0:
+        raise ValueError("symbol_length must be positive.")
+    if len(repeated_symbols) < 2 * symbol_length:
+        raise ValueError(
+            "At least two complete repeated symbols are required."
+        )
+
+    usable_length = (
+        len(repeated_symbols) // symbol_length
+    ) * symbol_length
+    symbols = repeated_symbols[:usable_length].reshape(
+        -1,
+        symbol_length,
+    )
+    correlation = np.sum(
+        np.conj(symbols[:-1]) * symbols[1:]
+    )
+
+    return float(
+        np.angle(correlation)
+        * sample_rate
+        / (2.0 * np.pi * symbol_length)
+    )
+
+
 def correct_cfo(
     samples: np.ndarray,
     cfo_hz: float,
