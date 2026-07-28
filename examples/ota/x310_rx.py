@@ -3,15 +3,6 @@ from pathlib import Path
 
 import numpy as np
 
-from powder_otfs.equalization.mmse import (
-    mmse_equalize_frames,
-)
-from powder_otfs.equalization.zf import (
-    zero_forcing_equalize_frames,
-)
-from powder_otfs.estimation.pilot import (
-    pilot_channel_estimate,
-)
 from powder_otfs.modulation.qam import qam_demodulate
 from powder_otfs.ota.config import (
     add_ota_config_arguments,
@@ -29,6 +20,7 @@ from powder_otfs.ota.synchronization import (
     find_training_preamble_starts,
 )
 from powder_otfs.ota.runtime import load_radio_runtime_config
+from powder_otfs.ota.receiver import estimate_and_equalize_frames
 from powder_otfs.ota.usrp import (
     configure_usrp_rx,
     receive_samples,
@@ -324,78 +316,12 @@ def main() -> None:
     received_grids = np.stack(
         received_dd_grids
     )
-    average_received_grid = np.mean(
-        received_grids,
-        axis=0,
+    frame_processing = estimate_and_equalize_frames(
+        received_grids=received_grids,
+        config=config,
     )
-
-    pilot_observation = np.zeros_like(
-        average_received_grid
-    )
-    observation_slices = (
-        config.observation_slices
-    )
-    pilot_observation[
-        observation_slices
-    ] = average_received_grid[
-        observation_slices
-    ]
-
-    observation_mask = np.zeros(
-        config.grid_shape,
-        dtype=bool,
-    )
-    observation_mask[
-        observation_slices
-    ] = True
-    noise_mask = (
-        ~config.data_mask
-        & ~observation_mask
-    )
-    noise_samples = received_grids[
-        :,
-        noise_mask,
-    ]
-    noise_variance = max(
-        float(
-            np.median(
-                np.abs(noise_samples) ** 2
-            )
-            / np.log(2.0)
-        ),
-        1e-12,
-    )
-    estimation_threshold = (
-        config.threshold_factor
-        * np.sqrt(noise_variance)
-    )
-
-    estimate = pilot_channel_estimate(
-        received_pilot_grid=pilot_observation,
-        pilot_position=config.pilot_position,
-        pilot_value=config.pilot_value,
-        sample_rate=config.sample_rate,
-        noise_variance=noise_variance,
-        threshold=estimation_threshold,
-    )
-
-    if config.equalizer_name.lower() == "mmse":
-        equalized_grids = mmse_equalize_frames(
-            received_grids=received_grids,
-            estimate=estimate,
-            symbol_energy=1.0,
-        )
-        equalizer_method = "MMSE"
-    elif config.equalizer_name.lower() == "zf":
-        equalized_grids = zero_forcing_equalize_frames(
-            received_grids=received_grids,
-            estimate=estimate,
-        )
-        equalizer_method = "Zero Forcing"
-    else:
-        raise ValueError(
-            "equalizer_name must be 'zf' or 'mmse'."
-        )
+    equalized_grids = frame_processing.equalized_grids
+    rejected_frames += frame_processing.rejected_frames
 
     frame_bers: list[float] = []
     symbol_mses: list[float] = []
@@ -473,10 +399,19 @@ def main() -> None:
         f"Fractional Offset Std : "
         f"{np.std(fractional_timing_offsets):.4f} samples"
     )
-    print(f"Noise Variance        : {noise_variance:.6e}")
-    print(f"Estimation Threshold  : {estimation_threshold:.6e}")
-    print(f"Channel Estimator     : {estimate.method}")
-    print(f"Equalizer             : {equalizer_method}")
+    print(
+        f"Mean Noise Variance   : "
+        f"{np.mean(frame_processing.noise_variances):.6e}"
+    )
+    print(
+        f"Mean Est. Threshold   : "
+        f"{np.mean(frame_processing.estimation_thresholds):.6e}"
+    )
+    print(
+        f"Channel Estimator     : "
+        f"{frame_processing.estimator_method} (per frame)"
+    )
+    print(f"Equalizer             : {frame_processing.equalizer_method}")
     print(
         "===================================================\n"
     )
