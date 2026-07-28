@@ -50,6 +50,15 @@ def parse_arguments() -> argparse.Namespace:
         default=6.0,
         help="Receive-capture duration in seconds (default: 6).",
     )
+    parser.add_argument(
+        "--channel-block-size",
+        type=int,
+        default=50,
+        help=(
+            "Frames sharing one channel estimate "
+            "(default: 50; use 1 for per-frame estimation)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -61,6 +70,8 @@ def main() -> None:
     antenna = "RX2"
     if args.capture_duration <= 0.0:
         raise ValueError("capture_duration must be positive.")
+    if args.channel_block_size <= 0:
+        raise ValueError("channel_block_size must be positive.")
 
     config = ota_config_from_arguments(args)
     capture_samples = int(
@@ -157,6 +168,7 @@ def main() -> None:
     print("Fractional Timing    : Enabled")
     print("CFO Correction       : Enabled")
     print(f"Channel Estimator    : Embedded Pilot")
+    print(f"Channel Block Size   : {args.channel_block_size} frames")
     print(f"Equalizer            : {config.equalizer_name.upper()}")
     print(
         "=======================================================\n"
@@ -319,6 +331,7 @@ def main() -> None:
     frame_processing = estimate_and_equalize_frames(
         received_grids=received_grids,
         config=config,
+        channel_block_size=args.channel_block_size,
     )
     equalized_grids = frame_processing.equalized_grids
     rejected_frames += frame_processing.rejected_frames
@@ -409,7 +422,8 @@ def main() -> None:
     )
     print(
         f"Channel Estimator     : "
-        f"{frame_processing.estimator_method} (per frame)"
+        f"{frame_processing.estimator_method} "
+        f"(blocks of {args.channel_block_size} frames)"
     )
     print(f"Equalizer             : {frame_processing.equalizer_method}")
     print(

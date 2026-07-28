@@ -2,8 +2,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from powder_otfs.equalization.mmse import mmse_equalizer
-from powder_otfs.equalization.zf import zero_forcing_equalizer
+from powder_otfs.equalization.mmse import mmse_equalize_frames
+from powder_otfs.equalization.zf import zero_forcing_equalize_frames
 from powder_otfs.estimation.pilot import pilot_channel_estimate
 from powder_otfs.ota.config import OTFSOTAConfig
 
@@ -23,8 +23,9 @@ class FrameEqualizationResult:
 def estimate_and_equalize_frames(
     received_grids: np.ndarray,
     config: OTFSOTAConfig,
+    channel_block_size: int = 50,
 ) -> FrameEqualizationResult:
-    """Estimate and equalize every received frame independently."""
+    """Estimate one channel per frame block and batch-equalize that block."""
 
     if received_grids.ndim != 3:
         raise ValueError(
@@ -35,6 +36,8 @@ def estimate_and_equalize_frames(
         raise ValueError(
             "received grid dimensions do not match the OTA configuration."
         )
+    if channel_block_size <= 0:
+        raise ValueError("channel_block_size must be positive.")
 
     observation_mask = np.zeros(
         config.grid_shape,
@@ -57,8 +60,12 @@ def estimate_and_equalize_frames(
     else:
         raise ValueError("equalizer_name must be 'zf' or 'mmse'.")
 
-    for received_grid in received_grids:
-        noise_samples = received_grid[noise_mask]
+    for block_start in range(0, len(received_grids), channel_block_size):
+        received_block = received_grids[
+            block_start:block_start + channel_block_size
+        ]
+        average_received_grid = np.mean(received_block, axis=0)
+        noise_samples = received_block[:, noise_mask]
         noise_variance = max(
             float(
                 np.median(np.abs(noise_samples) ** 2)
@@ -71,8 +78,8 @@ def estimate_and_equalize_frames(
             * np.sqrt(noise_variance)
         )
 
-        pilot_observation = np.zeros_like(received_grid)
-        pilot_observation[config.observation_slices] = received_grid[
+        pilot_observation = np.zeros_like(average_received_grid)
+        pilot_observation[config.observation_slices] = average_received_grid[
             config.observation_slices
         ]
 
@@ -88,22 +95,22 @@ def estimate_and_equalize_frames(
         except ValueError as error:
             if "No channel paths detected" not in str(error):
                 raise
-            rejected_frames += 1
+            rejected_frames += len(received_block)
             continue
 
         if equalizer_name == "mmse":
-            equalized_grid = mmse_equalizer(
-                received_grid=received_grid,
+            equalized_block = mmse_equalize_frames(
+                received_grids=received_block,
                 estimate=estimate,
                 symbol_energy=1.0,
             )
         else:
-            equalized_grid = zero_forcing_equalizer(
-                received_grid=received_grid,
+            equalized_block = zero_forcing_equalize_frames(
+                received_grids=received_block,
                 estimate=estimate,
             )
 
-        equalized_grids.append(equalized_grid.symbols)
+        equalized_grids.extend(equalized_block)
         noise_variances.append(noise_variance)
         estimation_thresholds.append(estimation_threshold)
         estimator_method = estimate.method
