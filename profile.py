@@ -12,11 +12,11 @@ DESCRIPTION = """
 
 This profile creates a two-node SISO OTFS experiment in the POWDER indoor OTA
 lab. The user selects one transmit radio and one receive radio from the four
-indoor NI B210s and four indoor NI X310s.
+indoor NI B210s, four indoor NI X310s, and two indoor NI N310s.
 
 Each B210 is USB-attached to its corresponding `ota-nuc` compute node. Each
-X310 is connected through a dedicated 10 Gb/s link to a server-class compute
-node.
+X310 or N310 is connected through a dedicated network link to a server-class
+compute node.
 
 The experiment requests the reserved 3360-3380 MHz spectrum range and installs
 POWDER-OTFS and its dependencies automatically.
@@ -67,6 +67,8 @@ INDOOR_RADIOS = [
     ("ota-x310-2", "X310 #2"),
     ("ota-x310-3", "X310 #3"),
     ("ota-x310-4", "X310 #4"),
+    ("ota-n310-1", "N310 #1"),
+    ("ota-n310-2", "N310 #2"),
     ("ota-nuc1", "B210 #1 (ota-nuc1)"),
     ("ota-nuc2", "B210 #2 (ota-nuc2)"),
     ("ota-nuc3", "B210 #3 (ota-nuc3)"),
@@ -93,7 +95,7 @@ context.defineParameter(
 
 context.defineParameter(
     name="x310_compute_type",
-    description="Compute-node type used with each selected X310",
+    description="Compute-node type used with each selected X310 or N310",
     typ=portal.ParameterType.STRING,
     defaultValue="d740",
     legalValues=[
@@ -127,8 +129,8 @@ def setup_command(role, radio_type):
     )
 
 
-def add_x310(role, radio_component_id):
-    """Add an X310 and its server-class compute node."""
+def add_networked_usrp(role, radio_component_id, radio_type):
+    """Add a network-attached USRP and its compute node."""
 
     compute = request.RawPC(role)
     compute.component_manager_id = COMPONENT_MANAGER_ID
@@ -148,7 +150,7 @@ def add_x310(role, radio_component_id):
     compute.addService(
         rspec.Execute(
             shell="bash",
-            command=setup_command(role, "x310"),
+            command=setup_command(role, radio_type),
         )
     )
 
@@ -183,7 +185,9 @@ def add_radio(role, component_id):
     """Add the compute and radio resources selected for one role."""
 
     if component_id.startswith("ota-x310-"):
-        add_x310(role, component_id)
+        add_networked_usrp(role, component_id, "x310")
+    elif component_id.startswith("ota-n310-"):
+        add_networked_usrp(role, component_id, "n310")
     else:
         add_b210(role, component_id)
 

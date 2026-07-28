@@ -40,9 +40,9 @@ def load_radio_runtime_config(
         values = json.load(file)
 
     radio_type = str(values["radio_type"]).lower()
-    if radio_type not in {"x310", "b210"}:
+    if radio_type not in {"x310", "n310", "b210"}:
         raise ValueError(
-            "radio_type must be 'x310' or 'b210'."
+            "radio_type must be 'x310', 'n310', or 'b210'."
         )
 
     return RadioRuntimeConfig(

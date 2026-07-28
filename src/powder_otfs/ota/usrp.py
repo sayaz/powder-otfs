@@ -12,7 +12,7 @@ def configure_usrp_tx(
     channel: int = 0,
     antenna: str = "TX/RX",
 ) -> uhd.usrp.MultiUSRP:
-    """Configure an X310 or B210 transmitter."""
+    """Configure an X310, N310, or B210 transmitter."""
 
     usrp = uhd.usrp.MultiUSRP(device_args)
     usrp.set_clock_source("external")
@@ -36,7 +36,7 @@ def configure_usrp_rx(
     channel: int = 0,
     antenna: str = "RX2",
 ) -> uhd.usrp.MultiUSRP:
-    """Configure an X310 or B210 receiver."""
+    """Configure an X310, N310, or B210 receiver."""
 
     usrp = uhd.usrp.MultiUSRP(device_args)
     usrp.set_clock_source("external")

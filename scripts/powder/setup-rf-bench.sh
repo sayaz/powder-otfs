@@ -9,7 +9,7 @@ radio_role="${2:-unknown}"
 center_frequency="${3:-3500000000}"
 
 case "${radio_type}" in
-    x310)
+    x310|n310)
         device_args="addr=192.168.40.2"
         ;;
     b210)
@@ -48,9 +48,9 @@ sdr_interface="$(
 
 if [[ -n "${sdr_interface}" ]]; then
     ip link set dev "${sdr_interface}" mtu 9000
-    echo "Configured X310 network interface ${sdr_interface}."
+    echo "Configured networked USRP interface ${sdr_interface}."
 else
-    echo "No X310 network interface found; using USB-attached SDR."
+    echo "No networked USRP interface found; using USB-attached SDR."
 fi
 
 project_user="$(
