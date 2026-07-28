@@ -38,8 +38,8 @@ apt-get install -y \
 
 uhd_images_downloader
 
-sysctl -w net.core.wmem_max=24862979
-sysctl -w net.core.rmem_max=24862979
+sysctl -w net.core.rmem_max=33554432
+sysctl -w net.core.wmem_max=33554432
 
 sdr_interface="$(
     ip -o -4 addr show |
