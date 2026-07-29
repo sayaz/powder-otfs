@@ -2,6 +2,7 @@ import argparse
 
 import numpy as np
 
+from powder_otfs.fec.qc_ldpc import create_qc_ldpc_code
 from powder_otfs.metrics.ber import bit_error_rate
 from powder_otfs.modulation.qam import qam_demodulate
 from powder_otfs.ota.config import (
@@ -84,12 +85,29 @@ def main() -> None:
     )
     rx_dd_grid = sfft(rx_tf_grid)
     rx_symbols = rx_dd_grid[config.data_mask]
-    rx_bits = qam_demodulate(
+    hard_bits = qam_demodulate(
         rx_symbols,
         order=config.qam_order,
     )
+    if config.fec_name == "qc-ldpc":
+        code = create_qc_ldpc_code(config.fec_rate, config.bits_per_frame)
+        interleaved_llrs = np.empty(config.bits_per_frame, dtype=float)
+        interleaved_llrs[0::2] = rx_symbols.real
+        interleaved_llrs[1::2] = rx_symbols.imag
+        codeword_llrs = np.empty(config.fec_codeword_length, dtype=float)
+        codeword_llrs[config.fec_interleaver] = interleaved_llrs[
+            :config.fec_codeword_length
+        ]
+        rx_bits = code.decode(
+            codeword_llrs,
+            maximum_iterations=config.ldpc_iterations,
+        )
+        expected_bits = transmitted.information_bits
+    else:
+        rx_bits = hard_bits
+        expected_bits = transmitted.information_bits
     ber = bit_error_rate(
-        transmitted_bits=transmitted.bits,
+        transmitted_bits=expected_bits,
         received_bits=rx_bits,
     )
 
@@ -111,6 +129,9 @@ def main() -> None:
     print(f"Transmitted Frame  : {len(tx_frame)} samples")
     print(f"Receiver Capture   : {len(rx_capture)} samples")
     print(f"Payload Start      : {payload_start}")
+    print(f"FEC                : {config.fec_name}")
+    if config.fec_name != "none":
+        print(f"FEC Rate           : {config.fec_rate}")
     print(f"Bit Error Rate     : {ber:.6f}")
     print("===========================================\n")
 

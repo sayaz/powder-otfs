@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
+from powder_otfs.fec.qc_ldpc import create_qc_ldpc_code
 from powder_otfs.modulation.qam import qam_demodulate
 from powder_otfs.ota.config import (
     add_ota_config_arguments,
@@ -128,7 +129,14 @@ def main() -> None:
         f"{config.num_doppler_bins}"
     )
     print(f"Data Symbols         : {config.num_data_symbols}")
-    print(f"Bits per Frame       : {config.bits_per_frame}")
+    print(f"Coded Capacity       : {config.bits_per_frame} bits")
+    print(f"FEC                  : {config.fec_name}")
+    if config.fec_name != "none":
+        print(f"FEC Rate             : {config.fec_rate}")
+        print(f"Information Bits     : {config.information_bits_per_frame}")
+        print(f"LDPC Codeword        : {config.fec_codeword_length} bits")
+        print(f"Filler Bits          : {config.fec_filler_bits}")
+        print(f"LDPC Iterations      : {config.ldpc_iterations}")
     print(f"Pilot Position       : {config.pilot_position}")
     print(f"Pilot Value          : {config.pilot_value}")
     print(
@@ -339,25 +347,53 @@ def main() -> None:
     frame_bers: list[float] = []
     symbol_mses: list[float] = []
     total_bit_errors = 0
+    total_pre_fec_errors = 0
 
     for equalized_grid in equalized_grids:
         received_symbols = equalized_grid[
             config.data_mask
         ]
-        received_bits = qam_demodulate(
+        hard_bits = qam_demodulate(
             received_symbols,
             order=config.qam_order,
         )
+        if config.fec_name == "qc-ldpc":
+            code = create_qc_ldpc_code(
+                config.fec_rate,
+                config.bits_per_frame,
+            )
+            interleaved_llrs = np.empty(config.bits_per_frame, dtype=float)
+            interleaved_llrs[0::2] = received_symbols.real
+            interleaved_llrs[1::2] = received_symbols.imag
+            codeword_llrs = np.empty(config.fec_codeword_length, dtype=float)
+            codeword_llrs[config.fec_interleaver] = interleaved_llrs[
+                :config.fec_codeword_length
+            ]
+            received_bits = code.decode(
+                codeword_llrs,
+                maximum_iterations=config.ldpc_iterations,
+            )
+            hard_codeword = np.empty(config.fec_codeword_length, dtype=np.uint8)
+            hard_codeword[config.fec_interleaver] = hard_bits[
+                :config.fec_codeword_length
+            ]
+            total_pre_fec_errors += int(
+                np.count_nonzero(hard_codeword != transmitted.codeword_bits)
+            )
+            expected_bits = transmitted.information_bits
+        else:
+            received_bits = hard_bits
+            expected_bits = transmitted.information_bits
         bit_errors = int(
             np.count_nonzero(
-                transmitted.bits
+                expected_bits
                 != received_bits
             )
         )
         total_bit_errors += bit_errors
         frame_bers.append(
             bit_errors
-            / config.bits_per_frame
+            / config.information_bits_per_frame
         )
         symbol_mses.append(
             float(
@@ -375,7 +411,7 @@ def main() -> None:
     )
     processed_bits = (
         processed_frames
-        * config.bits_per_frame
+        * config.information_bits_per_frame
     )
     aggregate_ber = (
         total_bit_errors
@@ -396,6 +432,9 @@ def main() -> None:
     print(f"Rejected Frames       : {rejected_frames}")
     print(f"Processed Bits        : {processed_bits}")
     print(f"Bit Errors            : {total_bit_errors}")
+    if config.fec_name != "none":
+        pre_fec_bits = processed_frames * config.fec_codeword_length
+        print(f"Pre-FEC Coded BER     : {total_pre_fec_errors / pre_fec_bits:.6f}")
     print(f"Aggregate BER         : {aggregate_ber:.6f}")
     print(f"Mean Frame BER        : {np.mean(frame_bers):.6f}")
     print(f"Minimum Frame BER     : {np.min(frame_bers):.6f}")

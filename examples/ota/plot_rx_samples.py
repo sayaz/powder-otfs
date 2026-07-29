@@ -2,6 +2,7 @@ import argparse
 
 import numpy as np
 
+from powder_otfs.fec.qc_ldpc import create_qc_ldpc_code
 from powder_otfs.equalization.mmse import mmse_equalizer
 from powder_otfs.equalization.zf import zero_forcing_equalizer
 from powder_otfs.estimation.pilot import pilot_channel_estimate
@@ -226,19 +227,36 @@ def main() -> None:
     received_symbols = equalized.symbols[
         config.data_mask
     ]
-    received_bits = qam_demodulate(
+    hard_bits = qam_demodulate(
         received_symbols,
         order=config.qam_order,
     )
+    if config.fec_name == "qc-ldpc":
+        code = create_qc_ldpc_code(config.fec_rate, config.bits_per_frame)
+        interleaved_llrs = np.empty(config.bits_per_frame, dtype=float)
+        interleaved_llrs[0::2] = received_symbols.real
+        interleaved_llrs[1::2] = received_symbols.imag
+        codeword_llrs = np.empty(config.fec_codeword_length, dtype=float)
+        codeword_llrs[config.fec_interleaver] = interleaved_llrs[
+            :config.fec_codeword_length
+        ]
+        received_bits = code.decode(
+            codeword_llrs,
+            maximum_iterations=config.ldpc_iterations,
+        )
+        expected_bits = transmitted.information_bits
+    else:
+        received_bits = hard_bits
+        expected_bits = transmitted.information_bits
     bit_errors = int(
         np.count_nonzero(
             received_bits
-            != transmitted.bits
+            != expected_bits
         )
     )
     ber = (
         bit_errors
-        / config.bits_per_frame
+        / config.information_bits_per_frame
     )
 
     print(
@@ -254,6 +272,9 @@ def main() -> None:
     print(f"Estimation Threshold : {threshold:.6e}")
     print(f"Channel Estimator    : {estimate.method}")
     print(f"Equalizer            : {equalized.method}")
+    print(f"FEC                  : {config.fec_name}")
+    if config.fec_name != "none":
+        print(f"FEC Rate             : {config.fec_rate}")
     print(f"Frame Bit Errors     : {bit_errors}")
     print(f"Frame BER            : {ber:.6f}")
     print(

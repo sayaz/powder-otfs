@@ -3,6 +3,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from powder_otfs.fec.qc_ldpc import create_qc_ldpc_code
+
 
 @dataclass(frozen=True, slots=True)
 class OTFSOTAConfig:
@@ -21,12 +23,21 @@ class OTFSOTAConfig:
     stf_detection_threshold: float = 0.75
     ltf_detection_threshold: float = 0.50
     random_seed: int = 12345
+    fec_name: str = "none"
+    fec_rate: str = "1/2"
+    ldpc_iterations: int = 30
 
     def __post_init__(self) -> None:
         if self.bandwidth_mhz not in (1.0, 5.0, 10.0, 20.0):
             raise ValueError(
                 "bandwidth_mhz must be 1, 5, 10, or 20."
             )
+        if self.fec_name not in ("none", "qc-ldpc"):
+            raise ValueError("fec_name must be 'none' or 'qc-ldpc'.")
+        if self.fec_rate not in ("1/2", "2/3", "3/4"):
+            raise ValueError("fec_rate must be '1/2', '2/3', or '3/4'.")
+        if self.ldpc_iterations <= 0:
+            raise ValueError("ldpc_iterations must be positive.")
 
     @property
     def sample_rate(self) -> float:
@@ -140,6 +151,37 @@ class OTFSOTAConfig:
         )
 
     @property
+    def fec_codeword_length(self) -> int:
+        """Return transmitted LDPC bits, excluding uncoded filler bits."""
+
+        if self.fec_name == "none":
+            return self.bits_per_frame
+        return create_qc_ldpc_code(
+            self.fec_rate,
+            self.bits_per_frame,
+        ).codeword_length
+
+    @property
+    def information_bits_per_frame(self) -> int:
+        """Return user-information bits carried by one frame."""
+
+        if self.fec_name == "none":
+            return self.bits_per_frame
+        return create_qc_ldpc_code(
+            self.fec_rate,
+            self.bits_per_frame,
+        ).information_length
+
+    @property
+    def fec_filler_bits(self) -> int:
+        return self.bits_per_frame - self.fec_codeword_length
+
+    @property
+    def fec_interleaver(self) -> np.ndarray:
+        rng = np.random.default_rng(self.random_seed + 1000)
+        return rng.permutation(self.fec_codeword_length)
+
+    @property
     def observation_slices(
         self,
     ) -> tuple[slice, slice]:
@@ -204,6 +246,24 @@ def add_ota_config_arguments(
         default=2,
         help="Maximum supported Doppler shift in bins (default: 2).",
     )
+    parser.add_argument(
+        "--fec",
+        choices=("none", "qc-ldpc"),
+        default="none",
+        help="Forward error correction (default: none).",
+    )
+    parser.add_argument(
+        "--fec-rate",
+        choices=("1/2", "2/3", "3/4"),
+        default="1/2",
+        help="QC-LDPC code rate when FEC is enabled (default: 1/2).",
+    )
+    parser.add_argument(
+        "--ldpc-iterations",
+        type=int,
+        default=30,
+        help="Maximum QC-LDPC decoder iterations (default: 30).",
+    )
 
 
 def ota_config_from_arguments(
@@ -217,4 +277,7 @@ def ota_config_from_arguments(
         num_doppler_bins=arguments.doppler_bins,
         maximum_supported_delay=arguments.max_delay_samples,
         maximum_supported_doppler=arguments.max_doppler_bins,
+        fec_name=arguments.fec,
+        fec_rate=arguments.fec_rate,
+        ldpc_iterations=arguments.ldpc_iterations,
     )

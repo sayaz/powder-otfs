@@ -45,8 +45,22 @@ delay/Doppler options. The default bandwidth and sample rate are 20 MHz and
 
 ```bash
 python3 examples/ota/ota_rx.py --bandwidth-mhz 20 --rx-gain 20
-python3 examples/ota/ota_tx.py --bandwidth-mhz 20 --tx-gain 10
+python3 examples/ota/ota_tx.py --bandwidth-mhz 20 --tx-gain 10 --peak-amplitude 0.85
 ```
+
+The transmitter defaults to a peak complex-sample magnitude of `0.85`. Use
+`--peak-amplitude` to test another value between zero and one.
+
+FEC is disabled by default. Enable the selectable QC-LDPC implementation on
+both nodes with matching settings:
+
+```bash
+python3 examples/ota/ota_rx.py --bandwidth-mhz 20 --rx-gain 20 --fec qc-ldpc --fec-rate 1/2
+python3 examples/ota/ota_tx.py --bandwidth-mhz 20 --tx-gain 20 --peak-amplitude 0.85 --fec qc-ldpc --fec-rate 1/2
+```
+
+Available QC-LDPC rates are `1/2`, `2/3`, and `3/4`. Rate `1/2` provides the
+strongest protection and should be tested first.
 
 The transmitter and receiver entry points are:
 

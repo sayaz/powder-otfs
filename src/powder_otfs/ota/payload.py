@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from powder_otfs.fec.qc_ldpc import create_qc_ldpc_code
 from powder_otfs.modulation.qam import qam_modulate
 from powder_otfs.ota.config import OTFSOTAConfig
 from powder_otfs.otfs.grid import insert_pilot_and_guards
@@ -13,6 +14,8 @@ class OTFSPayload:
     """Known transmitted bits, symbols, DD grid, and time samples."""
 
     bits: np.ndarray
+    information_bits: np.ndarray
+    codeword_bits: np.ndarray
     data_symbols: np.ndarray
     dd_grid: np.ndarray
     waveform: np.ndarray
@@ -26,12 +29,28 @@ def create_otfs_payload(
     rng = np.random.default_rng(
         config.random_seed
     )
-    bits = rng.integers(
+    information_bits = rng.integers(
         0,
         2,
-        config.bits_per_frame,
+        config.information_bits_per_frame,
         dtype=np.uint8,
     )
+    if config.fec_name == "qc-ldpc":
+        code = create_qc_ldpc_code(
+            config.fec_rate,
+            config.bits_per_frame,
+        )
+        codeword_bits = code.encode(information_bits)
+        interleaved_bits = codeword_bits[config.fec_interleaver]
+        bits = np.concatenate(
+            (
+                interleaved_bits,
+                np.zeros(config.fec_filler_bits, dtype=np.uint8),
+            )
+        )
+    else:
+        codeword_bits = information_bits.copy()
+        bits = information_bits.copy()
     data_symbols = qam_modulate(
         bits,
         order=config.qam_order,
@@ -65,6 +84,8 @@ def create_otfs_payload(
 
     return OTFSPayload(
         bits=bits,
+        information_bits=information_bits,
+        codeword_bits=codeword_bits,
         data_symbols=data_symbols,
         dd_grid=dd_grid,
         waveform=waveform,
