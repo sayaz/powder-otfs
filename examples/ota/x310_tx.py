@@ -11,6 +11,11 @@ from powder_otfs.ota.framing import (
     create_training_preamble,
     normalize_waveform,
 )
+from powder_otfs.ota.impairments import (
+    add_delayed_path,
+    apply_fractional_delay,
+    apply_frequency_offset,
+)
 from powder_otfs.ota.payload import create_otfs_payload
 from powder_otfs.ota.runtime import load_radio_runtime_config
 from powder_otfs.ota.usrp import (
@@ -37,6 +42,30 @@ def parse_arguments() -> argparse.Namespace:
         type=int,
         default=5000,
         help="Number of repeated frames to transmit (default: 5000).",
+    )
+    parser.add_argument(
+        "--extra-path-delay-samples",
+        type=int,
+        default=0,
+        help="Delay of an optional second path in samples (default: 0).",
+    )
+    parser.add_argument(
+        "--extra-path-gain",
+        type=complex,
+        default=0.0 + 0.0j,
+        help="Complex gain of the optional second path (default: 0).",
+    )
+    parser.add_argument(
+        "--cfo-hz",
+        type=float,
+        default=0.0,
+        help="Controlled carrier-frequency offset in Hz (default: 0).",
+    )
+    parser.add_argument(
+        "--fractional-delay-samples",
+        type=float,
+        default=0.0,
+        help="Controlled fractional-sample delay in [-0.5, 0.5] (default: 0).",
     )
     return parser.parse_args()
 
@@ -68,6 +97,15 @@ def main() -> None:
             config.cyclic_prefix_samples
         ),
     )
+    tx_frame = add_delayed_path(
+        waveform=tx_frame,
+        delay_samples=args.extra_path_delay_samples,
+        gain=args.extra_path_gain,
+    )
+    tx_frame = apply_fractional_delay(
+        waveform=tx_frame,
+        delay_samples=args.fractional_delay_samples,
+    )
     tx_frame = normalize_waveform(
         tx_frame,
         peak_amplitude=peak_amplitude,
@@ -75,6 +113,11 @@ def main() -> None:
     repeated_waveform = np.tile(
         tx_frame,
         repeat_count,
+    )
+    repeated_waveform = apply_frequency_offset(
+        waveform=repeated_waveform,
+        cfo_hz=args.cfo_hz,
+        sample_rate=config.sample_rate,
     ).astype(np.complex64)
 
     print(
@@ -89,6 +132,16 @@ def main() -> None:
     print(f"Sample Rate        : {config.sample_rate:.0f} samples/s")
     print(f"Bandwidth          : {config.bandwidth_mhz:.1f} MHz")
     print(f"TX Gain            : {tx_gain:.1f} dB")
+    print(
+        f"Extra Delay Path   : "
+        f"delay={args.extra_path_delay_samples} samples, "
+        f"gain={args.extra_path_gain}"
+    )
+    print(f"Added CFO          : {args.cfo_hz:.3f} Hz")
+    print(
+        f"Fractional Delay   : "
+        f"{args.fractional_delay_samples:.3f} samples"
+    )
     print(f"Modulation         : {config.qam_order}-QAM")
     print(
         f"DD Grid            : "
