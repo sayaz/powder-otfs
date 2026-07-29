@@ -38,6 +38,15 @@ def parse_arguments() -> argparse.Namespace:
         help="USRP transmit gain in dB (default: 0).",
     )
     parser.add_argument(
+        "--peak-amplitude",
+        type=float,
+        default=0.85,
+        help=(
+            "Peak magnitude of normalized complex baseband samples in "
+            "(0, 1] (default: 0.85)."
+        ),
+    )
+    parser.add_argument(
         "--repeat-count",
         type=int,
         default=5000,
@@ -76,7 +85,7 @@ def main() -> None:
     tx_gain = args.tx_gain
     channel = 0
     antenna = "TX/RX"
-    peak_amplitude = 0.5
+    peak_amplitude = args.peak_amplitude
     repeat_count = args.repeat_count
 
     if repeat_count <= 0:
@@ -132,6 +141,7 @@ def main() -> None:
     print(f"Sample Rate        : {config.sample_rate:.0f} samples/s")
     print(f"Bandwidth          : {config.bandwidth_mhz:.1f} MHz")
     print(f"TX Gain            : {tx_gain:.1f} dB")
+    print(f"Peak Amplitude     : {peak_amplitude:.2f}")
     print(
         f"Extra Delay Path   : "
         f"delay={args.extra_path_delay_samples} samples, "
@@ -149,7 +159,13 @@ def main() -> None:
         f"{config.num_doppler_bins}"
     )
     print(f"Data Symbols       : {config.num_data_symbols}")
-    print(f"Bits per Frame     : {config.bits_per_frame}")
+    print(f"Coded Capacity     : {config.bits_per_frame} bits")
+    print(f"FEC                 : {config.fec_name}")
+    if config.fec_name != "none":
+        print(f"FEC Rate            : {config.fec_rate}")
+        print(f"Information Bits    : {config.information_bits_per_frame}")
+        print(f"LDPC Codeword       : {config.fec_codeword_length} bits")
+        print(f"Filler Bits         : {config.fec_filler_bits}")
     print(f"Pilot Position     : {config.pilot_position}")
     print(f"Pilot Value        : {config.pilot_value}")
     print(

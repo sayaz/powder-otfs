@@ -39,3 +39,16 @@ def test_default_ota_bandwidth_is_20_mhz() -> None:
 
     assert config.bandwidth_mhz == 20.0
     assert config.sample_rate == 20e6
+
+
+def test_qc_ldpc_configuration_selects_rate() -> None:
+    rate_half = OTFSOTAConfig(fec_name="qc-ldpc", fec_rate="1/2")
+    rate_three_quarters = OTFSOTAConfig(
+        fec_name="qc-ldpc",
+        fec_rate="3/4",
+    )
+
+    assert rate_half.fec_codeword_length == 828
+    assert rate_half.information_bits_per_frame == 414
+    assert rate_half.fec_filler_bits == 34
+    assert rate_three_quarters.information_bits_per_frame == 621
