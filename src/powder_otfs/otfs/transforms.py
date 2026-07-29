@@ -4,13 +4,13 @@ import numpy as np
 def isfft(grid: np.ndarray) -> np.ndarray:
     """Convert a delay-Doppler grid to a time-frequency grid."""
 
-    temp = np.fft.ifft(
+    temp = np.fft.fft(
         grid,
         axis=0,
         norm="ortho",
     )
 
-    return np.fft.fft(
+    return np.fft.ifft(
         temp,
         axis=1,
         norm="ortho",
@@ -55,13 +55,13 @@ def wigner(
 def sfft(tf_grid: np.ndarray) -> np.ndarray:
     """Convert a time-frequency grid to a delay-Doppler grid."""
 
-    temp = np.fft.ifft(
+    temp = np.fft.fft(
         tf_grid,
         axis=1,
         norm="ortho",
     )
 
-    return np.fft.fft(
+    return np.fft.ifft(
         temp,
         axis=0,
         norm="ortho",

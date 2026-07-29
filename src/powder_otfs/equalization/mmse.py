@@ -14,8 +14,45 @@ def mmse_equalizer(
     if symbol_energy <= 0:
         raise ValueError("symbol_energy must be positive.")
 
+    equalized_grids = mmse_equalize_frames(
+        received_grids=received_grid[
+            np.newaxis,
+            ...,
+        ],
+        estimate=estimate,
+        symbol_energy=symbol_energy,
+    )
+
+    return EqualizedGrid(
+        symbols=equalized_grids[0],
+        method="MMSE",
+    )
+
+
+def mmse_equalize_frames(
+    received_grids: np.ndarray,
+    estimate: ChannelEstimate,
+    symbol_energy: float = 1.0,
+) -> np.ndarray:
+    """MMSE-equalize multiple grids using one channel estimate."""
+
+    if symbol_energy <= 0:
+        raise ValueError("symbol_energy must be positive.")
+
+    if received_grids.ndim != 3:
+        raise ValueError(
+            "received_grids must have shape "
+            "(frames, delay_bins, doppler_bins)."
+        )
+
     channel_matrix = estimate.channel_response
-    received_vector = received_grid.reshape(-1)
+    grid_shape = received_grids.shape[1:]
+    received_matrix = (
+        received_grids.reshape(
+            received_grids.shape[0],
+            -1,
+        ).T
+    )
 
     hermitian = channel_matrix.conj().T
 
@@ -33,20 +70,14 @@ def mmse_equalizer(
         )
     )
 
-    matched_received = (
-        hermitian @ received_vector
-    )
+    matched_received = hermitian @ received_matrix
 
-    equalized_vector = np.linalg.solve(
+    equalized_matrix = np.linalg.solve(
         system_matrix,
         matched_received,
     )
 
-    equalized_grid = equalized_vector.reshape(
-        received_grid.shape
-    )
-
-    return EqualizedGrid(
-        symbols=equalized_grid,
-        method="MMSE",
+    return equalized_matrix.T.reshape(
+        received_grids.shape[0],
+        *grid_shape,
     )

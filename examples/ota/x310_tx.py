@@ -1,96 +1,132 @@
+import argparse
+
 import numpy as np
 
-from powder_otfs.modulation.qam import qam_modulate
+from powder_otfs.ota.config import (
+    add_ota_config_arguments,
+    ota_config_from_arguments,
+)
 from powder_otfs.ota.framing import (
     build_ota_frame,
-    create_preamble,
+    create_training_preamble,
     normalize_waveform,
 )
-from powder_otfs.ota.x310 import (
-    configure_x310_tx,
+from powder_otfs.ota.payload import create_otfs_payload
+from powder_otfs.ota.runtime import load_radio_runtime_config
+from powder_otfs.ota.usrp import (
+    configure_usrp_tx,
     transmit_waveform,
 )
-from powder_otfs.otfs.transforms import heisenberg, isfft
+
+
+def parse_arguments() -> argparse.Namespace:
+    """Parse transmitter configuration options."""
+
+    parser = argparse.ArgumentParser(
+        description="Transmit an OTFS waveform using a POWDER USRP.",
+    )
+    add_ota_config_arguments(parser)
+    parser.add_argument(
+        "--tx-gain",
+        type=float,
+        default=0.0,
+        help="USRP transmit gain in dB (default: 0).",
+    )
+    parser.add_argument(
+        "--repeat-count",
+        type=int,
+        default=5000,
+        help="Number of repeated frames to transmit (default: 5000).",
+    )
+    return parser.parse_args()
 
 
 def main() -> None:
-    device_address = "192.168.40.2"
-    sample_rate = 1e6
-    center_frequency = 3.5e9
-    tx_gain = 0.0
+    args = parse_arguments()
+    runtime = load_radio_runtime_config()
+    tx_gain = args.tx_gain
     channel = 0
     antenna = "TX/RX"
-
-    num_delay_bins = 32
-    num_doppler_bins = 16
-    qam_order = 4
-    guard_samples = 128
-    preamble_half_length = 64
     peak_amplitude = 0.5
-    repeat_count = 5000
-    random_seed = 12345
+    repeat_count = args.repeat_count
 
-    rng = np.random.default_rng(random_seed)
+    if repeat_count <= 0:
+        raise ValueError("repeat_count must be positive.")
 
-    num_symbols = num_delay_bins * num_doppler_bins
-    bits_per_symbol = int(np.log2(qam_order))
-    num_bits = num_symbols * bits_per_symbol
-
-    bits = rng.integers(
-        0,
-        2,
-        num_bits,
-        dtype=np.uint8,
+    config = ota_config_from_arguments(args)
+    payload = create_otfs_payload(
+        config
     )
-
-    tx_symbols = qam_modulate(
-        bits,
-        order=qam_order,
-    )
-
-    tx_dd_grid = tx_symbols.reshape(
-        num_delay_bins,
-        num_doppler_bins,
-    )
-
-    tx_tf_grid = isfft(tx_dd_grid)
-    tx_payload = heisenberg(tx_tf_grid)
-
-    preamble = create_preamble(
-        half_length=preamble_half_length,
-        seed=random_seed,
-    )
+    training = create_training_preamble()
+    preamble = training.samples
 
     tx_frame = build_ota_frame(
-        payload=tx_payload,
+        payload=payload.waveform,
         preamble=preamble,
-        guard_samples=guard_samples,
+        guard_samples=config.time_guard_samples,
+        cyclic_prefix_samples=(
+            config.cyclic_prefix_samples
+        ),
     )
-
     tx_frame = normalize_waveform(
         tx_frame,
         peak_amplitude=peak_amplitude,
     )
-
     repeated_waveform = np.tile(
         tx_frame,
         repeat_count,
     ).astype(np.complex64)
 
-    print("\n========== X310 OTFS Transmitter ==========")
-    print(f"Device Address     : {device_address}")
-    print(f"Center Frequency   : {center_frequency / 1e9:.3f} GHz")
-    print(f"Sample Rate        : {sample_rate:.0f} samples/s")
+    print(
+        "\n========== USRP OTFS Transmitter =========="
+    )
+    print(f"Radio Type         : {runtime.radio_type.upper()}")
+    print(f"Device Arguments   : {runtime.device_args}")
+    print(
+        f"Center Frequency   : "
+        f"{runtime.center_frequency / 1e9:.3f} GHz"
+    )
+    print(f"Sample Rate        : {config.sample_rate:.0f} samples/s")
+    print(f"Bandwidth          : {config.bandwidth_mhz:.1f} MHz")
     print(f"TX Gain            : {tx_gain:.1f} dB")
+    print(f"Modulation         : {config.qam_order}-QAM")
+    print(
+        f"DD Grid            : "
+        f"{config.num_delay_bins} x "
+        f"{config.num_doppler_bins}"
+    )
+    print(f"Data Symbols       : {config.num_data_symbols}")
+    print(f"Bits per Frame     : {config.bits_per_frame}")
+    print(f"Pilot Position     : {config.pilot_position}")
+    print(f"Pilot Value        : {config.pilot_value}")
+    print(
+        f"DD Guard Size      : "
+        f"{2 * config.guard_delay + 1} x "
+        f"{2 * config.guard_doppler + 1}"
+    )
+    print(
+        f"Cyclic Prefix      : "
+        f"{config.cyclic_prefix_samples} samples "
+        f"({config.cyclic_prefix_samples / config.sample_rate * 1e6:.3f} us)"
+    )
+    print(f"STF                : {len(training.stf)} samples")
+    print(f"LTF                : {len(training.ltf)} samples")
+    print(f"Complete Preamble  : {len(preamble)} samples")
+    print(
+        f"Time Guard         : "
+        f"{config.time_guard_samples} samples per side"
+    )
     print(f"Frame Length       : {len(tx_frame)} samples")
     print(f"Repeated Frames    : {repeat_count}")
     print(f"Total Samples      : {len(repeated_waveform)}")
-    print("===========================================\n")
+    print(
+        "===========================================\n"
+    )
 
-    usrp = configure_x310_tx(
-        device_address=device_address,
-        sample_rate=sample_rate,
-        center_frequency=center_frequency,
+    usrp = configure_usrp_tx(
+        device_args=runtime.device_args,
+        sample_rate=config.sample_rate,
+        center_frequency=runtime.center_frequency,
         gain=tx_gain,
         channel=channel,
         antenna=antenna,

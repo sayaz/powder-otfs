@@ -1,14 +1,28 @@
+import argparse
+from pathlib import Path
+
 import numpy as np
 
-from powder_otfs.metrics.ber import bit_error_rate
-from powder_otfs.modulation.qam import (
-    qam_demodulate,
-    qam_modulate,
+from powder_otfs.modulation.qam import qam_demodulate
+from powder_otfs.ota.config import (
+    add_ota_config_arguments,
+    ota_config_from_arguments,
 )
-from powder_otfs.ota.framing import create_preamble
-from powder_otfs.ota.synchronization import find_payload_start
-from powder_otfs.ota.x310 import (
-    configure_x310_rx,
+from powder_otfs.ota.frequency_offset import (
+    correct_cfo,
+    estimate_repeated_symbol_cfo,
+)
+from powder_otfs.ota.framing import create_training_preamble
+from powder_otfs.ota.payload import create_otfs_payload
+from powder_otfs.ota.synchronization import (
+    correct_fractional_timing,
+    estimate_fractional_timing_offset,
+    find_training_preamble_starts,
+)
+from powder_otfs.ota.runtime import load_radio_runtime_config
+from powder_otfs.ota.receiver import estimate_and_equalize_frames
+from powder_otfs.ota.usrp import (
+    configure_usrp_rx,
     receive_samples,
 )
 from powder_otfs.otfs.transforms import (
@@ -17,63 +31,158 @@ from powder_otfs.otfs.transforms import (
 )
 
 
+def parse_arguments() -> argparse.Namespace:
+    """Parse receiver configuration options."""
+
+    parser = argparse.ArgumentParser(
+        description="Receive and decode OTFS frames using a POWDER USRP.",
+    )
+    add_ota_config_arguments(parser)
+    parser.add_argument(
+        "--rx-gain",
+        type=float,
+        default=20.0,
+        help="USRP receive gain in dB (default: 20).",
+    )
+    parser.add_argument(
+        "--capture-duration",
+        type=float,
+        default=6.0,
+        help="Receive-capture duration in seconds (default: 6).",
+    )
+    parser.add_argument(
+        "--channel-block-size",
+        type=int,
+        default=50,
+        help=(
+            "Frames sharing one channel estimate "
+            "(default: 50; use 1 for per-frame estimation)."
+        ),
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    device_address = "192.168.40.2"
-    sample_rate = 1e6
-    center_frequency = 3.5e9
-    rx_gain = 20.0
+    args = parse_arguments()
+    runtime = load_radio_runtime_config()
+    rx_gain = args.rx_gain
     channel = 0
     antenna = "RX2"
-    capture_samples = 6_000_000
+    if args.capture_duration <= 0.0:
+        raise ValueError("capture_duration must be positive.")
+    if args.channel_block_size <= 0:
+        raise ValueError("channel_block_size must be positive.")
 
-    num_delay_bins = 32
-    num_doppler_bins = 16
-    qam_order = 4
-    preamble_half_length = 64
-    random_seed = 12345
-
-    rng = np.random.default_rng(random_seed)
-
-    num_symbols = num_delay_bins * num_doppler_bins
-    bits_per_symbol = int(np.log2(qam_order))
-    num_bits = num_symbols * bits_per_symbol
-    payload_samples = num_symbols
-
-    transmitted_bits = rng.integers(
-        0,
-        2,
-        num_bits,
-        dtype=np.uint8,
+    config = ota_config_from_arguments(args)
+    capture_samples = int(
+        round(
+            args.capture_duration
+            * config.sample_rate
+        )
+    )
+    save_received_samples = True
+    received_samples_path = Path(
+        "results/rx_samples.npy"
     )
 
-    transmitted_symbols = qam_modulate(
-        transmitted_bits,
-        order=qam_order,
+    transmitted = create_otfs_payload(
+        config
+    )
+    training = create_training_preamble()
+    preamble = training.samples
+
+    frame_length = (
+        config.time_guard_samples
+        + len(preamble)
+        + config.cyclic_prefix_samples
+        + config.num_grid_symbols
+        + config.time_guard_samples
     )
 
-    preamble = create_preamble(
-        half_length=preamble_half_length,
-        seed=random_seed,
+    print(
+        "\n========== USRP OTFS Receiver Configuration =========="
     )
-
-    print("\n========== X310 OTFS Receiver ==========")
-    print(f"Device Address     : {device_address}")
-    print(f"Center Frequency   : {center_frequency / 1e9:.3f} GHz")
-    print(f"Sample Rate        : {sample_rate:.0f} samples/s")
-    print(f"RX Gain            : {rx_gain:.1f} dB")
-    print(f"Capture Samples    : {capture_samples}")
+    print(f"Radio Type           : {runtime.radio_type.upper()}")
+    print(f"Device Arguments     : {runtime.device_args}")
+    print(
+        f"Center Frequency     : "
+        f"{runtime.center_frequency / 1e9:.3f} GHz"
+    )
+    print(f"Sample Rate          : {config.sample_rate:.0f} samples/s")
+    print(f"Bandwidth            : {config.bandwidth_mhz:.1f} MHz")
+    print(f"RX Gain              : {rx_gain:.1f} dB")
+    print(f"Channel              : {channel}")
+    print(f"RX Antenna           : {antenna}")
+    print(f"Capture Samples      : {capture_samples}")
+    print(
+        f"Capture Duration     : "
+        f"{capture_samples / config.sample_rate:.3f} s"
+    )
+    print(f"Save IQ Samples      : {save_received_samples}")
+    if save_received_samples:
+        print(f"IQ Output File       : {received_samples_path}")
+    print(f"Modulation           : {config.qam_order}-QAM")
+    print(
+        f"DD Grid              : "
+        f"{config.num_delay_bins} x "
+        f"{config.num_doppler_bins}"
+    )
+    print(f"Data Symbols         : {config.num_data_symbols}")
+    print(f"Bits per Frame       : {config.bits_per_frame}")
+    print(f"Pilot Position       : {config.pilot_position}")
+    print(f"Pilot Value          : {config.pilot_value}")
+    print(
+        f"DD Guard Size        : "
+        f"{2 * config.guard_delay + 1} x "
+        f"{2 * config.guard_doppler + 1}"
+    )
+    print(
+        f"Supported Delay      : "
+        f"0 to {config.maximum_supported_delay} samples"
+    )
+    print(
+        f"Supported Doppler    : "
+        f"±{config.maximum_supported_doppler} bins"
+    )
+    print(
+        f"Cyclic Prefix        : "
+        f"{config.cyclic_prefix_samples} samples "
+        f"({config.cyclic_prefix_samples / config.sample_rate * 1e6:.3f} us)"
+    )
+    print(f"STF                  : {len(training.stf)} samples")
+    print(f"LTF                  : {len(training.ltf)} samples")
+    print(f"Complete Preamble    : {len(preamble)} samples")
+    print(
+        f"Time Guard           : "
+        f"{config.time_guard_samples} samples per side"
+    )
+    print(f"Complete Frame       : {frame_length} samples")
+    print(
+        f"STF Threshold        : "
+        f"{config.stf_detection_threshold:.2f}"
+    )
+    print(
+        f"LTF Threshold        : "
+        f"{config.ltf_detection_threshold:.2f}"
+    )
+    print("Fractional Timing    : Enabled")
+    print("CFO Correction       : Enabled")
+    print(f"Channel Estimator    : Embedded Pilot")
+    print(f"Channel Block Size   : {args.channel_block_size} frames")
+    print(f"Equalizer            : {config.equalizer_name.upper()}")
+    print(
+        "=======================================================\n"
+    )
     print("Waiting for samples...")
-    print("========================================\n")
 
-    usrp = configure_x310_rx(
-        device_address=device_address,
-        sample_rate=sample_rate,
-        center_frequency=center_frequency,
+    usrp = configure_usrp_rx(
+        device_args=runtime.device_args,
+        sample_rate=config.sample_rate,
+        center_frequency=runtime.center_frequency,
         gain=rx_gain,
         channel=channel,
         antenna=antenna,
     )
-
     received = receive_samples(
         usrp=usrp,
         num_samples=capture_samples,
@@ -81,81 +190,245 @@ def main() -> None:
         timeout=5.0,
     )
 
-    payload_start = find_payload_start(
+    if save_received_samples:
+        received_samples_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        np.save(
+            received_samples_path,
+            received,
+        )
+        print(
+            f"Received IQ saved to "
+            f"{received_samples_path.resolve()}"
+        )
+
+    print("Capture complete. Detecting frames...")
+
+    preamble_starts = find_training_preamble_starts(
         received=received,
-        preamble=preamble,
+        preamble=training,
+        stf_threshold=config.stf_detection_threshold,
+        ltf_threshold=config.ltf_detection_threshold,
+        minimum_separation=frame_length // 2,
     )
 
-    preamble_start = payload_start - len(preamble)
+    received_dd_grids: list[np.ndarray] = []
+    channel_gains: list[complex] = []
+    cfo_estimates_hz: list[float] = []
+    fractional_timing_offsets: list[float] = []
+    rejected_frames = 0
 
-    received_preamble = received[
-        preamble_start:payload_start
-    ]
-
-    channel_gain = np.vdot(
-        preamble,
-        received_preamble,
-    ) / np.vdot(
-        preamble,
-        preamble,
-    )
-
-    if abs(channel_gain) < 1e-12:
-        raise RuntimeError(
-            "Estimated channel gain is too small."
+    for preamble_start in preamble_starts:
+        payload_start = (
+            preamble_start
+            + len(preamble)
+            + config.cyclic_prefix_samples
+        )
+        payload_end = (
+            payload_start
+            + config.num_grid_symbols
         )
 
-    received_payload = received[
-        payload_start:
-        payload_start + payload_samples
-    ]
+        if (
+            preamble_start < 0
+            or payload_end > len(received)
+        ):
+            rejected_frames += 1
+            continue
 
-    if len(received_payload) != payload_samples:
-        raise RuntimeError(
-            "Capture ended before the complete payload arrived."
+        received_frame = received[
+            preamble_start:payload_end
+        ]
+        coarse_cfo_hz = estimate_repeated_symbol_cfo(
+            repeated_symbols=received_frame[:len(training.stf)],
+            symbol_length=len(training.stf_short_symbol),
+            sample_rate=config.sample_rate,
+        )
+        coarse_corrected_frame = correct_cfo(
+            samples=received_frame,
+            cfo_hz=coarse_cfo_hz,
+            sample_rate=config.sample_rate,
         )
 
-    corrected_payload = (
-        received_payload / channel_gain
+        fractional_offset = estimate_fractional_timing_offset(
+            received=coarse_corrected_frame,
+            known_sequence=training.ltf_symbol,
+            integer_start=training.ltf_symbol_offset,
+        )
+        timing_corrected_frame = correct_fractional_timing(
+            samples=coarse_corrected_frame,
+            offset_samples=fractional_offset,
+        )
+
+        ltf_symbol_start = training.ltf_symbol_offset
+        repeated_ltf = timing_corrected_frame[
+            ltf_symbol_start:
+            ltf_symbol_start + 2 * len(training.ltf_symbol)
+        ]
+        fine_cfo_hz = estimate_repeated_symbol_cfo(
+            repeated_symbols=repeated_ltf,
+            symbol_length=len(training.ltf_symbol),
+            sample_rate=config.sample_rate,
+        )
+        corrected_frame = correct_cfo(
+            samples=timing_corrected_frame,
+            cfo_hz=fine_cfo_hz,
+            sample_rate=config.sample_rate,
+        )
+        corrected_ltf = corrected_frame[
+            len(training.stf):len(preamble)
+        ]
+
+        channel_gain = np.vdot(
+            training.ltf,
+            corrected_ltf,
+        ) / np.vdot(
+            training.ltf,
+            training.ltf,
+        )
+
+        if abs(channel_gain) < 1e-12:
+            rejected_frames += 1
+            continue
+
+        payload_offset = (
+            len(preamble)
+            + config.cyclic_prefix_samples
+        )
+        corrected_payload = (
+            corrected_frame[payload_offset:]
+            / channel_gain
+        )
+
+        received_tf_grid = wigner(
+            corrected_payload,
+            num_subcarriers=config.num_delay_bins,
+            num_time_slots=config.num_doppler_bins,
+        )
+        received_dd_grid = sfft(
+            received_tf_grid
+        )
+
+        received_dd_grids.append(
+            received_dd_grid
+        )
+        channel_gains.append(channel_gain)
+        cfo_estimates_hz.append(
+            coarse_cfo_hz + fine_cfo_hz
+        )
+        fractional_timing_offsets.append(fractional_offset)
+
+    if not received_dd_grids:
+        raise RuntimeError(
+            "No complete valid OTFS frames were decoded."
+        )
+
+    received_grids = np.stack(
+        received_dd_grids
+    )
+    frame_processing = estimate_and_equalize_frames(
+        received_grids=received_grids,
+        config=config,
+        channel_block_size=args.channel_block_size,
+    )
+    equalized_grids = frame_processing.equalized_grids
+    rejected_frames += frame_processing.rejected_frames
+
+    frame_bers: list[float] = []
+    symbol_mses: list[float] = []
+    total_bit_errors = 0
+
+    for equalized_grid in equalized_grids:
+        received_symbols = equalized_grid[
+            config.data_mask
+        ]
+        received_bits = qam_demodulate(
+            received_symbols,
+            order=config.qam_order,
+        )
+        bit_errors = int(
+            np.count_nonzero(
+                transmitted.bits
+                != received_bits
+            )
+        )
+        total_bit_errors += bit_errors
+        frame_bers.append(
+            bit_errors
+            / config.bits_per_frame
+        )
+        symbol_mses.append(
+            float(
+                np.mean(
+                    np.abs(
+                        received_symbols
+                        - transmitted.data_symbols
+                    ) ** 2
+                )
+            )
+        )
+
+    processed_frames = len(
+        equalized_grids
+    )
+    processed_bits = (
+        processed_frames
+        * config.bits_per_frame
+    )
+    aggregate_ber = (
+        total_bit_errors
+        / processed_bits
+    )
+    gain_magnitudes = np.abs(
+        np.asarray(channel_gains)
+    )
+    cfo_estimates = np.asarray(
+        cfo_estimates_hz
     )
 
-    received_tf_grid = wigner(
-        corrected_payload,
-        num_subcarriers=num_delay_bins,
-        num_time_slots=num_doppler_bins,
+    print(
+        "\n========== X310 OTFS Multi-Frame Result =========="
     )
-
-    received_dd_grid = sfft(
-        received_tf_grid
+    print(f"Detected Frames       : {len(preamble_starts)}")
+    print(f"Processed Frames      : {processed_frames}")
+    print(f"Rejected Frames       : {rejected_frames}")
+    print(f"Processed Bits        : {processed_bits}")
+    print(f"Bit Errors            : {total_bit_errors}")
+    print(f"Aggregate BER         : {aggregate_ber:.6f}")
+    print(f"Mean Frame BER        : {np.mean(frame_bers):.6f}")
+    print(f"Minimum Frame BER     : {np.min(frame_bers):.6f}")
+    print(f"Maximum Frame BER     : {np.max(frame_bers):.6f}")
+    print(f"Mean Symbol MSE       : {np.mean(symbol_mses):.6e}")
+    print(f"Mean Channel Magnitude: {np.mean(gain_magnitudes):.6e}")
+    print(f"Mean CFO Estimate     : {np.mean(cfo_estimates):.3f} Hz")
+    print(f"CFO Standard Deviation: {np.std(cfo_estimates):.3f} Hz")
+    print(
+        f"Mean Fractional Offset: "
+        f"{np.mean(fractional_timing_offsets):.4f} samples"
     )
-
-    received_symbols = (
-        received_dd_grid.reshape(-1)
+    print(
+        f"Fractional Offset Std : "
+        f"{np.std(fractional_timing_offsets):.4f} samples"
     )
-
-    received_bits = qam_demodulate(
-        received_symbols,
-        order=qam_order,
+    print(
+        f"Mean Noise Variance   : "
+        f"{np.mean(frame_processing.noise_variances):.6e}"
     )
-
-    ber = bit_error_rate(
-        transmitted_bits=transmitted_bits,
-        received_bits=received_bits,
+    print(
+        f"Mean Est. Threshold   : "
+        f"{np.mean(frame_processing.estimation_thresholds):.6e}"
     )
-
-    symbol_error = np.mean(
-        np.abs(
-            received_symbols
-            - transmitted_symbols
-        ) ** 2
+    print(
+        f"Channel Estimator     : "
+        f"{frame_processing.estimator_method} "
+        f"(blocks of {args.channel_block_size} frames)"
     )
-
-    print("\n========== X310 OTFS Result ==========")
-    print(f"Payload Start      : {payload_start}")
-    print(f"Channel Gain       : {channel_gain}")
-    print(f"Symbol MSE         : {symbol_error:.6e}")
-    print(f"Bit Error Rate     : {ber:.6f}")
-    print("======================================\n")
+    print(f"Equalizer             : {frame_processing.equalizer_method}")
+    print(
+        "===================================================\n"
+    )
 
 
 if __name__ == "__main__":

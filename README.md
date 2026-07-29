@@ -14,6 +14,7 @@ validated signal-processing modules for over-the-air experiments on the
 - Multipath delay-Doppler channel with AWGN
 - Fixed, Rayleigh, and Rician fading
 - Perfect-CSI and embedded-pilot channel estimation
+- Book-based phase-aware circulant delay-Doppler channel matrix
 - Zero-Forcing and MMSE equalization
 - Multi-frame BER calculation
 - Delay-Doppler and constellation debugging plots
@@ -21,40 +22,24 @@ validated signal-processing modules for over-the-air experiments on the
 
 ## System model
 
-```mermaid
-flowchart LR
-    A["Random bits"] --> B["QPSK modulator"]
-    B --> C["Delay-Doppler grid"]
-    P["Pilot and guards"] --> C
-    C --> D["ISFFT"]
-    D --> E["Heisenberg transform"]
-    E --> F["Multipath delay-Doppler channel<br/>Fading + AWGN"]
-    F --> G["Wigner transform"]
-    G --> H["SFFT"]
-    H --> I["Pilot-based channel estimator"]
-    I --> J["ZF or MMSE equalizer"]
-    H --> J
-    J --> K["QPSK demodulator"]
-    K --> L["BER"]
-```
+![Complete OTFS transmitter, channel, and receiver](docs/images/otfs-system-model.svg)
 
 ## Quick start
 
 From the project root:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-python -m pip install pytest
-python -m pytest
-python examples/end_to_end.py
+python3 -m pip install .
+python3 examples/simulation/end_to_end.py
 ```
+
+The POWDER profile performs the required installation automatically, so users
+can run the OTA examples directly after startup.
 
 Select between one and ten predefined channel paths:
 
 ```bash
-python examples/end_to_end.py --num-paths 5
+python3 examples/simulation/end_to_end.py --num-paths 5
 ```
 
 ## Documentation
@@ -63,16 +48,19 @@ python examples/end_to_end.py --num-paths 5
   from OFDM, and how the transmitter and receiver work.
 - [Simulation guide](docs/simulation-guide.md): installation, parameters,
   running experiments, interpreting output, and debugging.
-
-POWDER and USRP instructions will be added after the OTA implementation exists
-and has been validated.
+- [POWDER OTA guide](docs/ota-guide.md): workbench startup, pilot-bearing X310
+  transmission, IQ capture, channel estimation, equalization, and offline
+  plotting.
 
 ## Current limitations
 
-The current implementation is SISO and supports QPSK, integer-sample delays,
-and grid-aligned Doppler estimation. It does not yet include explicit cyclic
-prefix processing, fractional delay/Doppler estimation, synchronization, FEC,
-standardized channel profiles, or OTA radio integration.
+The current implementation is SISO and supports QPSK, integer-sample channel
+delays, and grid-aligned Doppler estimation. The offline X310 link uses
+802.11-style STF/LTF fields for frame synchronization, coarse and fine CFO
+estimation, and fractional-sample timing correction. It then uses a cyclic
+prefix, embedded DD pilot, pilot-based channel estimation, and ZF or MMSE
+equalization. It does not yet include fractional delay/Doppler channel
+estimation, FEC, or standardized channel profiles.
 
 ## Roadmap
 

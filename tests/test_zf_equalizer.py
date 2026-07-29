@@ -1,6 +1,9 @@
 import numpy as np
 
-from powder_otfs.equalization.zf import zero_forcing_equalizer
+from powder_otfs.equalization.zf import (
+    zero_forcing_equalize_frames,
+    zero_forcing_equalizer,
+)
 from powder_otfs.estimation.estimate import ChannelEstimate
 
 
@@ -43,3 +46,30 @@ def test_zero_forcing_equalizer() -> None:
     )
 
     assert equalized.method == "Zero Forcing"
+
+
+def test_zf_equalizes_multiple_frames() -> None:
+    transmitted = np.array(
+        [
+            [[1.0 + 1.0j]],
+            [[-1.0 - 1.0j]],
+        ]
+    )
+    channel = np.array(
+        [[2.0 + 0.0j]]
+    )
+    estimate = ChannelEstimate(
+        channel_response=channel,
+        noise_variance=0.0,
+        method="Perfect CSI",
+    )
+
+    equalized = zero_forcing_equalize_frames(
+        received_grids=2.0 * transmitted,
+        estimate=estimate,
+    )
+
+    np.testing.assert_allclose(
+        equalized,
+        transmitted,
+    )
