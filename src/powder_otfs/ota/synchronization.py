@@ -278,7 +278,8 @@ def estimate_fractional_timing_offset(
             / max(known_energy * segment_energy, 1e-12)
         )
 
-    return float(candidates[int(np.argmax(scores))])
+    best_candidate = candidates[int(np.argmax(scores))]
+    return float(np.clip(best_candidate, -0.5, 0.5))
 
 
 def correct_fractional_timing(

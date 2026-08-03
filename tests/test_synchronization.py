@@ -111,3 +111,26 @@ def test_fractional_timing_estimation_and_correction() -> None:
         np.abs(corrected[40:-40] - aligned[40:-40]) ** 2
     )
     assert after_error < before_error
+
+
+def test_fractional_timing_boundary_is_clipped() -> None:
+    training = create_training_preamble()
+    aligned = np.concatenate(
+        (
+            training.samples,
+            np.zeros(128, dtype=np.complex64),
+        )
+    )
+    received = correct_fractional_timing(
+        aligned,
+        offset_samples=-0.5,
+    )
+
+    offset = estimate_fractional_timing_offset(
+        received=received,
+        known_sequence=training.ltf_symbol,
+        integer_start=training.ltf_symbol_offset,
+    )
+
+    assert -0.5 <= offset <= 0.5
+    correct_fractional_timing(received, offset_samples=offset)
