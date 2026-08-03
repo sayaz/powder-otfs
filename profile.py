@@ -23,7 +23,9 @@ and its dependencies automatically.
 """
 
 INSTRUCTIONS = """
-Wait until startup for both `tx` and `rx` reports `Finished`.
+Wait until startup for both `tx` and `rx` reports `Finished`. N310 startup can
+take longer because the matching UHD 4.7 host driver is built in an isolated
+location without replacing the UHD version used by X310 or B210 experiments.
 
 The project is available on both nodes at:
 

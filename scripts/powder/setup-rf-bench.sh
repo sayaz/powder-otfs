@@ -38,6 +38,14 @@ apt-get install -y \
 
 uhd_images_downloader
 
+uhd_environment_file=""
+if [[ "${radio_type}" == "n310" ]]; then
+    bash /local/repository/scripts/powder/install-uhd-4.7.sh
+    uhd_environment_file="/etc/profile.d/powder-otfs-uhd-4.7.sh"
+    # shellcheck disable=SC1090
+    source "${uhd_environment_file}"
+fi
+
 sysctl -w net.core.rmem_max=33554432
 sysctl -w net.core.wmem_max=33554432
 
@@ -107,11 +115,23 @@ if ! grep -Fq "${pythonpath_marker}" "${bashrc}"; then
     } >> "${bashrc}"
 fi
 
+if [[ -n "${uhd_environment_file}" ]] && \
+    ! grep -Fq "${uhd_environment_file}" "${bashrc}"; then
+    {
+        echo
+        echo "# POWDER-OTFS N310 UHD 4.7 environment"
+        echo "source ${uhd_environment_file}"
+    } >> "${bashrc}"
+fi
+
 chown \
     "${project_user}:${project_group}" \
     "${bashrc}"
 
 sudo -u "${project_user}" \
-    env PYTHONPATH="${project_dir}/src" \
+    env \
+    PATH="${PATH}" \
+    LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+    PYTHONPATH="${project_dir}/src${PYTHONPATH:+:${PYTHONPATH}}" \
     python3 -c \
     "import numpy, powder_otfs, uhd"
