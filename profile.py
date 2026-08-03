@@ -18,8 +18,8 @@ Each B210 is USB-attached to its corresponding `ota-nuc` compute node. Each
 X310 or N310 is connected through a dedicated network link to a server-class
 compute node.
 
-The experiment requests the reserved 3360-3380 MHz spectrum range and installs
-POWDER-OTFS and its dependencies automatically.
+The experiment uses a center frequency of 3.370 GHz and installs POWDER-OTFS
+and its dependencies automatically.
 """
 
 INSTRUCTIONS = """
@@ -194,8 +194,6 @@ def add_radio(role, component_id):
 
 add_radio("tx", parameters.tx_radio)
 add_radio("rx", parameters.rx_radio)
-
-request.requestSpectrum(3360.0, 3380.0, 0)
 
 tour = ig.Tour()
 tour.Description(ig.Tour.MARKDOWN, DESCRIPTION)
