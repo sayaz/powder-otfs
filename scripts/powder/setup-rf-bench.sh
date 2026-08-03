@@ -9,8 +9,11 @@ radio_role="${2:-unknown}"
 center_frequency="${3:-3500000000}"
 
 case "${radio_type}" in
-    x310|n310)
+    x310)
         device_args="addr=192.168.40.2"
+        ;;
+    n310)
+        device_args="addr=192.168.40.2,master_clock_rate=153600000"
         ;;
     b210)
         device_args="type=b200"

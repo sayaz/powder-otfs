@@ -41,6 +41,12 @@ def test_default_ota_bandwidth_is_20_mhz() -> None:
     assert config.sample_rate == 20e6
 
 
+def test_n310_compatible_bandwidth_is_supported() -> None:
+    config = OTFSOTAConfig(bandwidth_mhz=19.2)
+
+    assert config.sample_rate == 19.2e6
+
+
 def test_qc_ldpc_configuration_selects_rate() -> None:
     rate_half = OTFSOTAConfig(fec_name="qc-ldpc", fec_rate="1/2")
     rate_three_quarters = OTFSOTAConfig(

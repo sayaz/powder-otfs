@@ -190,6 +190,8 @@ def main() -> None:
         gain=rx_gain,
         channel=channel,
         antenna=antenna,
+        clock_source=runtime.clock_source,
+        time_source=runtime.time_source,
     )
     received = receive_samples(
         usrp=usrp,

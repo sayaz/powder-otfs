@@ -199,6 +199,8 @@ def main() -> None:
         gain=tx_gain,
         channel=channel,
         antenna=antenna,
+        clock_source=runtime.clock_source,
+        time_source=runtime.time_source,
     )
 
     sent = transmit_waveform(

@@ -1,3 +1,4 @@
+import math
 import time
 
 import numpy as np
@@ -11,13 +12,21 @@ def configure_usrp_tx(
     gain: float,
     channel: int = 0,
     antenna: str = "TX/RX",
+    clock_source: str = "external",
+    time_source: str = "external",
 ) -> uhd.usrp.MultiUSRP:
     """Configure an X310, N310, or B210 transmitter."""
 
     usrp = uhd.usrp.MultiUSRP(device_args)
-    usrp.set_clock_source("external")
-    usrp.set_time_source("external")
+    usrp.set_clock_source(clock_source)
+    usrp.set_time_source(time_source)
     usrp.set_tx_rate(sample_rate, channel)
+    actual_rate = usrp.get_tx_rate(channel)
+    if not math.isclose(actual_rate, sample_rate, rel_tol=1e-6):
+        raise RuntimeError(
+            "USRP TX sample-rate mismatch: "
+            f"requested {sample_rate}, received {actual_rate}."
+        )
     usrp.set_tx_freq(
         uhd.types.TuneRequest(center_frequency),
         channel,
@@ -35,13 +44,21 @@ def configure_usrp_rx(
     gain: float,
     channel: int = 0,
     antenna: str = "RX2",
+    clock_source: str = "external",
+    time_source: str = "external",
 ) -> uhd.usrp.MultiUSRP:
     """Configure an X310, N310, or B210 receiver."""
 
     usrp = uhd.usrp.MultiUSRP(device_args)
-    usrp.set_clock_source("external")
-    usrp.set_time_source("external")
+    usrp.set_clock_source(clock_source)
+    usrp.set_time_source(time_source)
     usrp.set_rx_rate(sample_rate, channel)
+    actual_rate = usrp.get_rx_rate(channel)
+    if not math.isclose(actual_rate, sample_rate, rel_tol=1e-6):
+        raise RuntimeError(
+            "USRP RX sample-rate mismatch: "
+            f"requested {sample_rate}, received {actual_rate}."
+        )
     usrp.set_rx_freq(
         uhd.types.TuneRequest(center_frequency),
         channel,

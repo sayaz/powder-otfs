@@ -28,9 +28,9 @@ class OTFSOTAConfig:
     ldpc_iterations: int = 30
 
     def __post_init__(self) -> None:
-        if self.bandwidth_mhz not in (1.0, 5.0, 10.0, 20.0):
+        if self.bandwidth_mhz not in (1.0, 5.0, 10.0, 19.2, 20.0):
             raise ValueError(
-                "bandwidth_mhz must be 1, 5, 10, or 20."
+                "bandwidth_mhz must be 1, 5, 10, 19.2, or 20."
             )
         if self.fec_name not in ("none", "qc-ldpc"):
             raise ValueError("fec_name must be 'none' or 'qc-ldpc'.")
@@ -218,7 +218,7 @@ def add_ota_config_arguments(
     parser.add_argument(
         "--bandwidth-mhz",
         type=float,
-        choices=(1.0, 5.0, 10.0, 20.0),
+        choices=(1.0, 5.0, 10.0, 19.2, 20.0),
         default=20.0,
         help="Baseband bandwidth and sample rate in MHz (default: 20).",
     )

@@ -13,6 +13,22 @@ class RadioRuntimeConfig:
     device_args: str
     center_frequency: float
 
+    @property
+    def clock_source(self) -> str:
+        """Return the reference-clock source available for this radio."""
+
+        if self.radio_type == "n310":
+            return "internal"
+        return "external"
+
+    @property
+    def time_source(self) -> str:
+        """Return the time source available for this radio."""
+
+        if self.radio_type == "n310":
+            return "internal"
+        return "external"
+
 
 def load_radio_runtime_config(
     path: str | Path | None = None,

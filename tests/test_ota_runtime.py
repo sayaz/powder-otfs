@@ -23,6 +23,8 @@ def test_load_x310_runtime_config(tmp_path) -> None:
     assert config.radio_type == "x310"
     assert config.device_args == "addr=192.168.40.2"
     assert config.center_frequency == 3.56e9
+    assert config.clock_source == "external"
+    assert config.time_source == "external"
 
 
 def test_load_b210_runtime_config(tmp_path) -> None:
@@ -45,6 +47,8 @@ def test_load_b210_runtime_config(tmp_path) -> None:
     assert config.radio_type == "b210"
     assert config.device_args == "type=b200"
     assert config.center_frequency == 3.56e9
+    assert config.clock_source == "external"
+    assert config.time_source == "external"
 
 
 def test_load_n310_runtime_config(tmp_path) -> None:
@@ -67,3 +71,5 @@ def test_load_n310_runtime_config(tmp_path) -> None:
     assert config.radio_type == "n310"
     assert config.device_args == "addr=192.168.40.2"
     assert config.center_frequency == 3.56e9
+    assert config.clock_source == "internal"
+    assert config.time_source == "internal"
